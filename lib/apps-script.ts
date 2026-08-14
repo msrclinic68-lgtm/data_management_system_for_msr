@@ -1,15 +1,10 @@
 // Google Apps Script integration
-const APPS_SCRIPT_URL = process.env.NEXT_PUBLIC_GOOGLE_APPS_SCRIPT_URL;
+const APPS_SCRIPT_URL = process.env.NEXT_PUBLIC_GOOGLE_APPS_SCRIPT_URL || process.env.GOOGLE_APPS_SCRIPT_URL;
+const SHARED_SECRET_TOKEN = process.env.SHARED_SECRET_TOKEN || "physio_secret_token_change_me";
 
-// Timeout constants (Google Apps Script can hang)
-const GET_TIMEOUT_MS = 15000;  // 15 seconds for reads
-const POST_TIMEOUT_MS = 30000; // 30 seconds for writes (media uploads can be large)
+const POST_TIMEOUT_MS = 30000; // 30 seconds for writes/reads
 
-/**
- * AssessmentData interface strictly follows the 65-column structure 
- * specified by the user to ensure 1:1 mapping with Google Sheets.
- */
-export interface AssessmentData {
+export interface PatientVisitData {
     // 1-13: Patient Demographics & Basics
     Date: string;
     PatientName: string;
@@ -25,62 +20,22 @@ export interface AssessmentData {
     SleepingHistory?: string;
     MenstruationHistory?: string;
 
-    // 14-18: Clinical History
+    // Clinical Evaluation
     ChiefComplaint?: string;
-    PresentHistory?: string;
-    PastHistory?: string;
     DiagnosticImaging?: string;
-    RedFlags?: string;
-
-    // 19-30: Physical Examination & Findings
-    Observation?: string;
-    ActiveROM?: string;
-    PassiveROM?: string;
-    MusclePower?: string;
-    Palpation?: string;
-    Gait?: string;
-    NeurologicalTests?: string;
-    Sensation?: string;
-    Reflexes?: string;
-    SpecialTests?: string;
-    FunctionalTesting?: string;
-    Comments?: string;
-
-    // 31-36: Pain Assessment
-    PainHistory?: string;
-    AggravatingFactors?: string;
-    EasingFactors?: string;
-    PainDescription?: string;
-    PainIntensity_VAS?: number | string;
-    SymptomsLocation?: string;
-
-    // 37-44: Treatment Strategy
-    ['Problem List']?: string;
     Diagnosis?: string;
     TreatmentPlan?: string;
-    ManualTherapy?: string;
-    Electrotherapy?: string;
-    ExercisePrescription?: string;
-    PatientEducation?: string;
-    HomeFollowups?: string;
-    ['Specific advice']?: string;
-
-    // 45-49: Summaries & Reviews
-    Review1?: string;
-    Review2?: string;
-    Review3?: string;
     DailyNote?: string;
+    Comments?: string;
 
-    // 50-53: Media Suite
+    // Media suite
     Media1?: string;
     Media2?: string;
     Media3?: string;
     Media4?: string;
-
-    // 54: System Data
     Timestamp?: string;
 
-    // System/Helper fields (not in Sheets columns)
+    // Helper/System fields
     files?: {
         name: string;
         type: string;
@@ -92,9 +47,48 @@ export interface AssessmentData {
     [key: string]: any;
 }
 
-export async function saveToGoogleSheet(data: AssessmentData) {
+export interface MedicineData {
+    id?: string;
+    ID?: string;
+    name: string;
+    batchType?: string;
+    unit: string;
+    unitMeasurement: string;
+    totalStock: number;
+    availableStock: number;
+    pendingStock: number;
+    outgoingStock: number;
+    lowStockThreshold: number;
+    rowIndex?: number;
+    Timestamp?: string;
+}
+
+export interface DispensedData {
+    id?: string;
+    patientName: string;
+    patientSlug?: string;
+    medicineName: string;
+    quantity: number;
+    dosage?: string;
+    type: 'patient' | 'quick';
+    timestamp?: string;
+}
+
+export interface ClinicSettingsData {
+    clinicName: string;
+    clinicLogo?: string;
+    clinicAddress: string;
+    doctorNames: string;
+    clinicContact: string;
+}
+
+/**
+ * Sends a POST request to Google Apps Script Web App.
+ * All communication is POST-only to secure the secret token in the body.
+ */
+async function postToAppsScript(payload: any) {
     if (!APPS_SCRIPT_URL) {
-        throw new Error('NEXT_PUBLIC_GOOGLE_APPS_SCRIPT_URL is not configured.');
+        throw new Error('NEXT_PUBLIC_GOOGLE_APPS_SCRIPT_URL / GOOGLE_APPS_SCRIPT_URL is not configured.');
     }
 
     const controller = new AbortController();
@@ -104,7 +98,10 @@ export async function saveToGoogleSheet(data: AssessmentData) {
         const response = await fetch(APPS_SCRIPT_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
+            body: JSON.stringify({
+                ...payload,
+                token: SHARED_SECRET_TOKEN
+            }),
             redirect: 'follow',
             signal: controller.signal,
         });
@@ -113,15 +110,22 @@ export async function saveToGoogleSheet(data: AssessmentData) {
         const text = await response.text();
 
         if (!response.ok) {
-            throw new Error(`Failed to save (HTTP ${response.status})`);
+            throw new Error(`Failed to communicate with Apps Script (HTTP ${response.status})`);
         }
 
+        let result;
         try {
-            return JSON.parse(text);
+            result = JSON.parse(text);
         } catch (parseErr) {
             console.error('Non-JSON response:', text.substring(0, 300));
             throw new Error('Invalid server response format.');
         }
+
+        if (result && result.success === false) {
+            throw new Error(result.error || 'Operation failed in Google Sheets');
+        }
+
+        return result;
     } catch (error) {
         clearTimeout(timeoutId);
         if (error instanceof Error) throw error;
@@ -129,54 +133,93 @@ export async function saveToGoogleSheet(data: AssessmentData) {
     }
 }
 
-export async function getFromGoogleSheet() {
-    if (!APPS_SCRIPT_URL) {
-        throw new Error('NEXT_PUBLIC_GOOGLE_APPS_SCRIPT_URL is not configured.');
-    }
+export async function saveToGoogleSheet(data: PatientVisitData) {
+    return postToAppsScript({
+        action: data.action || 'create',
+        type: 'patients',
+        data
+    });
+}
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), GET_TIMEOUT_MS);
+export async function getFromGoogleSheet(): Promise<PatientVisitData[]> {
+    const result = await postToAppsScript({
+        action: 'get',
+        type: 'patients'
+    });
+    return result.data || [];
+}
 
+// Medicines stock helpers
+export async function getMedicines(): Promise<MedicineData[]> {
+    const result = await postToAppsScript({
+        action: 'get',
+        type: 'medicines'
+    });
+    return result.data || [];
+}
+
+export async function saveMedicine(action: 'create' | 'update' | 'delete', data: MedicineData) {
+    return postToAppsScript({
+        action,
+        type: 'medicines',
+        data
+    });
+}
+
+// Dispensing helpers
+export async function getDispensedLogs(): Promise<DispensedData[]> {
+    const result = await postToAppsScript({
+        action: 'get',
+        type: 'dispensed'
+    });
+    return result.data || [];
+}
+
+export async function dispenseMedicine(data: DispensedData) {
+    return postToAppsScript({
+        action: 'create',
+        type: 'dispense',
+        data
+    });
+}
+
+// Settings helpers
+export async function getClinicSettings(): Promise<ClinicSettingsData> {
     try {
-        const response = await fetch(APPS_SCRIPT_URL, {
-            method: 'GET',
-            redirect: 'follow',
-            signal: controller.signal,
-            cache: 'no-store',
+        const result = await postToAppsScript({
+            action: 'get',
+            type: 'settings'
         });
-
-        clearTimeout(timeoutId);
-        const text = await response.text();
-
-        if (!response.ok) {
-            throw new Error(`Failed to fetch (HTTP ${response.status})`);
-        }
-
-        let result;
-        try {
-            result = JSON.parse(text);
-        } catch {
-            throw new Error('Invalid JSON format from server.');
-        }
-
-        if (Array.isArray(result)) {
-            return result.map((item, index) => ({
-                ...item,
-                id: index
-            }));
-        }
-
-        if (result && typeof result === 'object' && Array.isArray(result.data)) {
-            return result.data.map((item: any, index: number) => ({
-                ...item,
-                id: index
-            }));
-        }
-
-        return [];
+        
+        const defaultSettings: ClinicSettingsData = {
+            clinicName: "Prasad General Clinic",
+            clinicLogo: "",
+            clinicAddress: "123 Main Street, Clinic City",
+            doctorNames: "Dr. Prasad, M.B.B.S",
+            clinicContact: "123-456-7890"
+        };
+        
+        return {
+            ...defaultSettings,
+            ...(result.data || {})
+        };
     } catch (error) {
-        clearTimeout(timeoutId);
-        if (error instanceof Error) throw error;
-        throw new Error('Data retrieval error.');
+        console.error("Failed to load settings from Google Sheets:", error);
+        // Resilient fallback in case sheets is not yet configured or fails
+        return {
+            clinicName: "Prasad General Clinic",
+            clinicLogo: "",
+            clinicAddress: "123 Main Street, Clinic City",
+            doctorNames: "Dr. Prasad, M.B.B.S",
+            clinicContact: "123-456-7890"
+        };
     }
+}
+
+export async function saveClinicSettings(data: ClinicSettingsData) {
+    return postToAppsScript({
+        action: 'save',
+        type: 'settings',
+        data
+    });
 }

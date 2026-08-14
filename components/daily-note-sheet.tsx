@@ -19,7 +19,7 @@ import { formatDateShort } from "@/lib/format-date";
 import { useRouter } from "next/navigation";
 
 interface Assessment {
-    id: number | string;
+    id?: number | string;
     Date: string;
     PatientName: string;
     DailyNote?: string;

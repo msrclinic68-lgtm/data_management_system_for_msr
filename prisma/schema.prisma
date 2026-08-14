@@ -13,40 +13,62 @@ model Assessment {
   updatedAt DateTime @updatedAt
 
   // Patient Details
-  date       DateTime @default(now())
-  name       String
-  age        Int
-  occupation String?
-
-  // History
-  mechanismOfInjury String?
-  aggravatingFactors String?
-  twentyFourHourHistory String? // 24-Hour History
-  improvingStaticWorse String?
-  newOldInjury String?
-  pastHistory String?
-  diagnosticImaging String?
-
-  // Observation
-  observation String? // Posture etc.
-
-  // Examination
-  activeMovements String? // JSON string for L/R Ext/Flex
-  passiveMovements String? // JSON string for L/R Ext/Flex
-  comments String?
-  endFeel String?
-  capsularPattern String?
-
-  // Pain
-  painVas Int? // 0-10
-  painDescription String? // constant, periodic, episodic, occasional
-  symptomsLocation String? // JSON string for coordinates on body chart
-
-  // Tests
-  resistedIsometricMovements String?
-  functionalTesting String?
-  neurologicalTests String? // Sensory Scan, Reflexes, etc.
-  specialTests String?
-  jointPlayMovements String?
-  palpation String? // Tenderness, Effusion
+  date          DateTime @default(now())
+  name          String
+  age           Int
+  sex           String?
+  occupation    String?
+  phoneNumber   String?
+  height        String?
+  weight        String?
+  bloodPressure String?
+  
+  // History & Medical
+  diabeticMellitus     String?
+  dietHabit            String?
+  sleepingHistory      String?
+  menstruationHistory  String?
+  chiefComplaint       String?
+  diagnosticImaging    String?
+  diagnosis            String?
+  treatmentPlan        String?
+  dailyNote            String?
+  comments             String?
 }
+
+model Medicine {
+  id                String   @id @default(cuid())
+  name              String   @unique
+  batchType         String?
+  unit              String   // tablet, syrup, injection
+  unitMeasurement   String   // mg, ml
+  totalStock        Float    @default(0)
+  availableStock    Float    @default(0)
+  pendingStock      Float    @default(0)
+  outgoingStock     Float    @default(0)
+  lowStockThreshold Float    @default(10)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model DispensedRecord {
+  id           String   @id @default(cuid())
+  patientName  String   // Walk-in or Patient Name
+  patientSlug  String?
+  medicineName String
+  quantity     Float
+  dosage       String?
+  type         String   // "patient" or "quick"
+  timestamp    DateTime @default(now())
+}
+
+model ClinicSettings {
+  id            String   @id @default(cuid())
+  clinicName    String
+  clinicLogo    String?
+  clinicAddress String
+  doctorNames   String
+  clinicContact String
+  updatedAt     DateTime @updatedAt
+}
+

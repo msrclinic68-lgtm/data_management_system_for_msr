@@ -1,112 +1,333 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
- * Prasad Physiotherapy Clinic - Backend Sync Engine (v2.5 - Final)
- * Solves: Date Mismatch, Duplicates on Edit, and Phantom Columns.
- * Updated: Problem List, Specific advice, Removed Clinical Summary.
+ * General Clinic - Backend Sync Engine (v3.0 - General Clinic + Stock Sync)
+ * Features: Multi-sheet storage, concurrency LockService, and body-only secret token auth.
  */
 
-const SHEET_NAME = "Sheet1"; 
+const SHEET_NAME = "Sheet1"; // Patient Visits
+const MEDICINES_SHEET = "Medicines";
+const DISPENSED_SHEET = "Dispensed";
+const SETTINGS_SHEET = "Settings";
 const MEDIA_FOLDER_NAME = "ClinicalMedia";
 
-// ─── Core Handlers (GET/POST) ────────────────────────────────────────
-
-function doGet() {
-  const sheet = getOrCreateSheet();
-  const data = sheet.getDataRange().getValues();
-  if (data.length < 2) {
-    return ContentService.createTextOutput(JSON.stringify([])).setMimeType(ContentService.MimeType.JSON);
-  }
-  
-  const headers = data[0];
-  const rows = data.slice(1);
-  
-  const result = rows.map((row, i) => {
-    let obj = {};
-    headers.forEach((h, j) => {
-      obj[h] = row[j];
-    });
-    obj.rowIndex = i; // Array index for UI
-    return obj;
-  });
-  
-  return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
-}
+const SHARED_SECRET_TOKEN = "physio_secret_token_change_me"; // Make sure this matches Next.js env config
 
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
-    const sheet = getOrCreateSheet();
     
-    // 1. Process Media Uploads
-    const mediaUrls = [];
-    if (data.files && data.files.length > 0) {
-      const folder = getOrCreateMediaFolder();
-      data.files.forEach(file => {
-        const blob = Utilities.newBlob(Utilities.base64Decode(file.data), file.type, file.name);
-        const driveFile = folder.createFile(blob);
-        driveFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-        mediaUrls.push(`${driveFile.getId()}|${file.type}|${file.name}`);
-      });
+    // 1. Authenticate Request
+    if (!data.token || data.token !== SHARED_SECRET_TOKEN) {
+      return createJsonResponse({ success: false, error: "401 Unauthorized" });
     }
 
-    // 2. Map Data to Sheet1 (Locked to IST)
-    const timestamp = Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd HH:mm:ss");
-    const headers = getCoreHeaders();
+    const type = data.type || "patients";
+    const action = data.action || "get";
 
-    const rowData = headers.map(header => {
-      if (header === "Timestamp") return timestamp;
-      if (header.startsWith("Media")) {
-        const index = parseInt(header.replace("Media", "")) - 1;
-        return mediaUrls[index] || data[header] || "";
-      }
-      const val = data[header];
-      return val !== undefined ? val : "";
-    });
-
-    // 3. Save Action (Strategy: Update if rowIndex & action='update' are present, otherwise Append)
-    const isUpdate = (data.action === 'update' || data.action === 'EDIT') && data.rowIndex !== undefined;
-    
-    if (isUpdate) {
-      // The API sends (assessmentIndex + 2) which is the ACTUAL 1-based row number in Sheet1.
-      const actualRow = Number(data.rowIndex); 
-      if (!isNaN(actualRow) && actualRow > 1) {
-        sheet.getRange(actualRow, 1, 1, rowData.length).setValues([rowData]);
-        return createJsonResponse({ 
-          success: true, 
-          action: 'update', 
-          row: actualRow,
-          message: "Record successfully replaced at Row " + actualRow 
-        });
-      }
+    if (action === "get") {
+      return handleGet(type);
     }
 
-    // Default: Append new record
-    sheet.appendRow(rowData);
-    return createJsonResponse({ 
-      success: true, 
-      action: 'create', 
-      row: sheet.getLastRow(),
-      message: "New record successfully appended." 
-    });
-    
+    if (type === "settings") {
+      return handleSaveSettings(data.data);
+    }
+
+    if (type === "medicines") {
+      return handleStockAction(action, data.data);
+    }
+
+    if (type === "dispense" || type === "dispensed") {
+      return handleDispense(data.data);
+    }
+
+    // Default: patients
+    return handlePatientAction(action, data.data);
+
   } catch (err) {
     return createJsonResponse({ success: false, error: err.toString() });
   }
 }
 
-// ─── Utility & Fix Functions ──────────────────────────────────
-
-function createJsonResponse(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+// Keep a stub doGet for security guidance
+function doGet(e) {
+  return createJsonResponse({ 
+    success: false, 
+    error: "GET is disabled for security. Use POST with authorization token in body." 
+  });
 }
 
-function getOrCreateSheet() {
+// ─── GET Handler ─────────────────────────────────────────────────────
+function handleGet(type) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName(SHEET_NAME);
-  if (!sheet) {
-    sheet = ss.getSheets()[0];
+  setupSheets(ss);
+  
+  if (type === "settings") {
+    const sheet = ss.getSheetByName(SETTINGS_SHEET);
+    const rows = sheet.getDataRange().getValues();
+    const settings = {};
+    rows.slice(1).forEach(row => {
+      if (row[0]) settings[row[0]] = row[1] || "";
+    });
+    return createJsonResponse({ success: true, data: settings });
   }
-  return sheet;
+
+  if (type === "medicines") {
+    const sheet = ss.getSheetByName(MEDICINES_SHEET);
+    const data = sheet.getDataRange().getValues();
+    if (data.length < 2) return createJsonResponse({ success: true, data: [] });
+    const headers = data[0];
+    const result = data.slice(1).map((row, i) => {
+      let obj = {};
+      headers.forEach((h, j) => {
+        obj[h] = row[j];
+      });
+      obj.rowIndex = i; // Store array index for subsequent updates
+      return obj;
+    });
+    return createJsonResponse({ success: true, data: result });
+  }
+
+  if (type === "dispensed") {
+    const sheet = ss.getSheetByName(DISPENSED_SHEET);
+    const data = sheet.getDataRange().getValues();
+    if (data.length < 2) return createJsonResponse({ success: true, data: [] });
+    const headers = data[0];
+    const result = data.slice(1).map((row, i) => {
+      let obj = {};
+      headers.forEach((h, j) => {
+        obj[h] = row[j];
+      });
+      obj.rowIndex = i;
+      return obj;
+    });
+    return createJsonResponse({ success: true, data: result });
+  }
+
+  // patients (Sheet1)
+  const sheet = ss.getSheetByName(SHEET_NAME);
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return createJsonResponse({ success: true, data: [] });
+  const headers = data[0];
+  const result = data.slice(1).map((row, i) => {
+    let obj = {};
+    headers.forEach((h, j) => {
+      obj[h] = row[j];
+    });
+    obj.rowIndex = i;
+    return obj;
+  });
+  return createJsonResponse({ success: true, data: result });
+}
+
+// ─── Settings Handler ────────────────────────────────────────────────
+function handleSaveSettings(settingsData) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  setupSheets(ss);
+  const sheet = ss.getSheetByName(SETTINGS_SHEET);
+  sheet.clear();
+  sheet.appendRow(["Key", "Value"]);
+  
+  Object.keys(settingsData).forEach(key => {
+    sheet.appendRow([key, String(settingsData[key])]);
+  });
+  
+  return createJsonResponse({ success: true, message: "Settings saved successfully" });
+}
+
+// ─── Stock (Medicines) Handler ────────────────────────────────────────
+function handleStockAction(action, medicineData) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) {
+    return createJsonResponse({ success: false, error: "Concurrency lock acquisition timeout. Please try again." });
+  }
+  
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    setupSheets(ss);
+    const sheet = ss.getSheetByName(MEDICINES_SHEET);
+    const timestamp = Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd HH:mm:ss");
+    
+    if (action === "create") {
+      const id = "MED-" + Utilities.getUuid().substring(0, 8).toUpperCase();
+      const row = [
+        id,
+        medicineData.name,
+        medicineData.batchType || "",
+        medicineData.unit || "",
+        medicineData.unitMeasurement || "",
+        Number(medicineData.totalStock) || 0,
+        Number(medicineData.availableStock) || 0,
+        Number(medicineData.pendingStock) || 0,
+        Number(medicineData.outgoingStock) || 0,
+        Number(medicineData.lowStockThreshold) || 10,
+        timestamp
+      ];
+      sheet.appendRow(row);
+      return createJsonResponse({ success: true, action: "create", data: { id } });
+    }
+    
+    if (action === "update") {
+      const rowIndex = Number(medicineData.rowIndex); // UI 0-based array index
+      if (isNaN(rowIndex) || rowIndex < 0) {
+        return createJsonResponse({ success: false, error: "Invalid rowIndex" });
+      }
+      
+      const actualRow = rowIndex + 2; // maps to sheet row (header is row 1)
+      const row = [
+        medicineData.ID || medicineData.id || "",
+        medicineData.Name || medicineData.name || "",
+        medicineData.BatchType || medicineData.batchType || "",
+        medicineData.Unit || medicineData.unit || "",
+        medicineData.UnitMeasurement || medicineData.unitMeasurement || "",
+        Number(medicineData.TotalStock !== undefined ? medicineData.TotalStock : medicineData.totalStock) || 0,
+        Number(medicineData.AvailableStock !== undefined ? medicineData.AvailableStock : medicineData.availableStock) || 0,
+        Number(medicineData.PendingStock !== undefined ? medicineData.PendingStock : medicineData.pendingStock) || 0,
+        Number(medicineData.OutgoingStock !== undefined ? medicineData.OutgoingStock : medicineData.outgoingStock) || 0,
+        Number(medicineData.LowStockThreshold !== undefined ? medicineData.LowStockThreshold : medicineData.lowStockThreshold) || 10,
+        timestamp
+      ];
+      
+      sheet.getRange(actualRow, 1, 1, row.length).setValues([row]);
+      return createJsonResponse({ success: true, action: "update" });
+    }
+    
+    if (action === "delete") {
+      const rowIndex = Number(medicineData.rowIndex);
+      if (isNaN(rowIndex) || rowIndex < 0) {
+        return createJsonResponse({ success: false, error: "Invalid rowIndex" });
+      }
+      sheet.deleteRow(rowIndex + 2);
+      return createJsonResponse({ success: true, action: "delete" });
+    }
+    
+    return createJsonResponse({ success: false, error: "Unknown stock action" });
+    
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ─── Dispensing Handler ──────────────────────────────────────────────
+function handleDispense(dispenseData) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) {
+    return createJsonResponse({ success: false, error: "Concurrency lock acquisition timeout. Please try again." });
+  }
+  
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    setupSheets(ss);
+    
+    const medSheet = ss.getSheetByName(MEDICINES_SHEET);
+    const medData = medSheet.getDataRange().getValues();
+    if (medData.length < 2) {
+      return createJsonResponse({ success: false, error: "No medicines found in stock." });
+    }
+    
+    const targetMedName = dispenseData.medicineName;
+    const qtyToDispense = Number(dispenseData.quantity);
+    if (isNaN(qtyToDispense) || qtyToDispense <= 0) {
+      return createJsonResponse({ success: false, error: "Invalid dispense quantity." });
+    }
+    
+    let foundRowIndex = -1;
+    let currentAvailable = 0;
+    let currentOutgoing = 0;
+    
+    for (let i = 1; i < medData.length; i++) {
+      if (medData[i][1] === targetMedName || medData[i][0] === targetMedName) {
+        foundRowIndex = i + 1; // 1-based row number
+        currentAvailable = Number(medData[i][6]) || 0;
+        currentOutgoing = Number(medData[i][8]) || 0;
+        break;
+      }
+    }
+    
+    if (foundRowIndex === -1) {
+      return createJsonResponse({ success: false, error: "Medicine not found in stock: " + targetMedName });
+    }
+    
+    if (currentAvailable < qtyToDispense) {
+      return createJsonResponse({ 
+        success: false, 
+        error: "Insufficient stock. Available: " + currentAvailable + ", Requested: " + qtyToDispense 
+      });
+    }
+    
+    const newAvailable = currentAvailable - qtyToDispense;
+    const newOutgoing = currentOutgoing + qtyToDispense;
+    
+    // Update Medicines sheet G = AvailableStock (Col 7), I = OutgoingStock (Col 9)
+    medSheet.getRange(foundRowIndex, 7).setValue(newAvailable);
+    medSheet.getRange(foundRowIndex, 9).setValue(newOutgoing);
+    
+    // Record in Dispensed log
+    const dispSheet = ss.getSheetByName(DISPENSED_SHEET);
+    const id = "DISP-" + Utilities.getUuid().substring(0, 8).toUpperCase();
+    const timestamp = Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd HH:mm:ss");
+    
+    const logRow = [
+      id,
+      dispenseData.patientName || "Walk-in",
+      dispenseData.patientSlug || "",
+      targetMedName,
+      qtyToDispense,
+      dispenseData.dosage || "",
+      dispenseData.type || "quick",
+      timestamp
+    ];
+    dispSheet.appendRow(logRow);
+    
+    return createJsonResponse({ success: true, dispensedId: id, newAvailableStock: newAvailable });
+    
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ─── Patient Actions (Visits) Handler ──────────────────────────────────
+function handlePatientAction(action, patientData) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  setupSheets(ss);
+  const sheet = ss.getSheetByName(SHEET_NAME);
+  
+  // Process Media Uploads
+  const mediaUrls = [];
+  if (patientData.files && patientData.files.length > 0) {
+    const folder = getOrCreateMediaFolder();
+    patientData.files.forEach(file => {
+      const blob = Utilities.newBlob(Utilities.base64Decode(file.data), file.type, file.name);
+      const driveFile = folder.createFile(blob);
+      driveFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      mediaUrls.push(`${driveFile.getId()}|${file.type}|${file.name}`);
+    });
+  }
+  
+  const timestamp = Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd HH:mm:ss");
+  const headers = getPatientHeaders();
+  
+  const rowData = headers.map(header => {
+    if (header === "Timestamp") return timestamp;
+    if (header.startsWith("Media")) {
+      const index = parseInt(header.replace("Media", "")) - 1;
+      return mediaUrls[index] || patientData[header] || "";
+    }
+    const val = patientData[header];
+    return val !== undefined ? val : "";
+  });
+  
+  if (action === "update" && patientData.rowIndex !== undefined) {
+    const actualRow = Number(patientData.rowIndex) + 2; 
+    sheet.getRange(actualRow, 1, 1, rowData.length).setValues([rowData]);
+    return createJsonResponse({ success: true, action: "update" });
+  } else {
+    sheet.appendRow(rowData);
+    return createJsonResponse({ success: true, action: "create" });
+  }
+}
+
+// ─── Utilities ────────────────────────────────────────────────────────
+function createJsonResponse(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
 function getOrCreateMediaFolder() {
@@ -114,58 +335,55 @@ function getOrCreateMediaFolder() {
   return folders.hasNext() ? folders.next() : DriveApp.createFolder(MEDIA_FOLDER_NAME);
 }
 
-/**
- * 🚀 PRODUCTION FIX (RUN THIS ONCE)
- * Select 'migrateClinicalData' and click RUN to fix your Sheet1 structure.
- */
-function migrateClinicalData() {
-  const sheet = getOrCreateSheet();
-  const headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
-  const deprecated = ["24-hour response", "status", "injury type", "authentication by"];
-  
-  Logger.log("Starting Fix on Sheet1...");
-  
-  // 1. Delete bad columns
-  for (let i = headers.length - 1; i >= 0; i--) {
-    if (deprecated.some(d => headers[i].toLowerCase().includes(d.toLowerCase()))) {
-      sheet.deleteColumn(i + 1);
-    }
-  }
-  
-  // 2. Purge extra phantom columns (Column 55+)
-  const coreCount = getCoreHeaders().length;
-  if (sheet.getLastColumn() > coreCount) {
-    const extra = sheet.getLastColumn() - coreCount;
-    sheet.deleteColumns(coreCount + 1, extra);
-  }
-  
-  // 3. Re-set Header Titles on Sheet1
-  setupHeaders();
-  Logger.log("FIX COMPLETE: Sheet1 is now clean and aligned.");
-}
-
-function getCoreHeaders() {
+function getPatientHeaders() {
   return [
     "Date", "PatientName", "Age", "Sex", "Occupation", "PhoneNumber", "Height", "Weight", 
     "BloodPressure", "DiabeticMellitus", "DietHabit", "SleepingHistory", "MenstruationHistory",
-    "ChiefComplaint", "PresentHistory", "PastHistory", "DiagnosticImaging", "RedFlags",
-    "Observation", "ActiveROM", "PassiveROM", "MusclePower", "Palpation", "Gait", 
-    "NeurologicalTests", "Sensation", "Reflexes", "SpecialTests", "FunctionalTesting", "Comments",
-    "PainHistory", "AggravatingFactors", "EasingFactors", "PainDescription", "PainIntensity_VAS", "SymptomsLocation",
-    "Problem List", "Diagnosis", "TreatmentPlan", "ManualTherapy", "Electrotherapy", "ExercisePrescription", 
-    "PatientEducation", "HomeFollowups", "Specific advice",
-    "Review1", "Review2", "Review3", "DailyNote",
+    "ChiefComplaint", "DiagnosticImaging", "Diagnosis", "TreatmentPlan", "DailyNote", "Comments",
     "Media1", "Media2", "Media3", "Media4", "Timestamp"
   ];
 }
 
-function setupHeaders() {
-  const sheet = getOrCreateSheet();
-  const headers = getCoreHeaders();
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-  const range = sheet.getRange(1, 1, 1, headers.length);
-  range.setFontWeight("bold");
-  range.setBackground("#f3f3f3");
-  range.setHorizontalAlignment("center");
-  sheet.setFrozenRows(1);
+function setupSheets(ss) {
+  // 1. Ensure Patient Visits Sheet
+  let sheet1 = ss.getSheetByName(SHEET_NAME);
+  if (!sheet1) {
+    sheet1 = ss.insertSheet(SHEET_NAME);
+  }
+  const patientHeaders = getPatientHeaders();
+  sheet1.getRange(1, 1, 1, patientHeaders.length).setValues([patientHeaders]);
+  sheet1.getRange(1, 1, 1, patientHeaders.length).setFontWeight("bold").setBackground("#f3f3f3").setHorizontalAlignment("center");
+  sheet1.setFrozenRows(1);
+  
+  // 2. Ensure Medicines Stock Sheet
+  let medSheet = ss.getSheetByName(MEDICINES_SHEET);
+  if (!medSheet) {
+    medSheet = ss.insertSheet(MEDICINES_SHEET);
+  }
+  const medHeaders = ["ID", "Name", "BatchType", "Unit", "UnitMeasurement", "TotalStock", "AvailableStock", "PendingStock", "OutgoingStock", "LowStockThreshold", "Timestamp"];
+  medSheet.getRange(1, 1, 1, medHeaders.length).setValues([medHeaders]);
+  medSheet.getRange(1, 1, 1, medHeaders.length).setFontWeight("bold").setBackground("#f3f3f3").setHorizontalAlignment("center");
+  medSheet.setFrozenRows(1);
+  
+  // 3. Ensure Dispensed Logs Sheet
+  let dispSheet = ss.getSheetByName(DISPENSED_SHEET);
+  if (!dispSheet) {
+    dispSheet = ss.insertSheet(DISPENSED_SHEET);
+  }
+  const dispHeaders = ["ID", "PatientName", "PatientSlug", "MedicineName", "Quantity", "Dosage", "Type", "Timestamp"];
+  dispSheet.getRange(1, 1, 1, dispHeaders.length).setValues([dispHeaders]);
+  dispSheet.getRange(1, 1, 1, dispHeaders.length).setFontWeight("bold").setBackground("#f3f3f3").setHorizontalAlignment("center");
+  dispSheet.setFrozenRows(1);
+  
+  // 4. Ensure Clinic Settings Sheet
+  let settingsSheet = ss.getSheetByName(SETTINGS_SHEET);
+  if (!settingsSheet) {
+    settingsSheet = ss.insertSheet(SETTINGS_SHEET);
+    settingsSheet.appendRow(["Key", "Value"]);
+    settingsSheet.appendRow(["clinicName", "General Clinic"]);
+    settingsSheet.appendRow(["clinicLogo", ""]);
+    settingsSheet.appendRow(["clinicAddress", "123 Main Street, Clinic City"]);
+    settingsSheet.appendRow(["doctorNames", "Dr. John Doe"]);
+    settingsSheet.appendRow(["clinicContact", "123-456-7890"]);
+  }
 }
