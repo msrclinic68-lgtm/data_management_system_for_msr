@@ -1,4 +1,4 @@
-import { getFromGoogleSheet, getDispensedLogs } from "@/lib/apps-script";
+import { getPatientVisits, getDispensedLogs } from "@/lib/data-service";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import Link from "next/link";
@@ -47,7 +47,7 @@ export default async function AssessmentDetailPage(props: PageProps) {
 
     try {
         const [data, logs] = await Promise.all([
-            getFromGoogleSheet(),
+            getPatientVisits(),
             getDispensedLogs()
         ]);
         assessments = Array.isArray(data)

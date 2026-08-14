@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { saveToGoogleSheet, getFromGoogleSheet, PatientVisitData } from "@/lib/apps-script";
+import { savePatientVisit, getPatientVisits } from "@/lib/data-service";
 
 /**
  * POST /api/assessments
@@ -13,8 +13,8 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Patient name is required" }, { status: 400 });
         }
 
-        // General Clinic Patient Visit Schema Mapping (24 columns total in Sheet1)
-        const rowData: PatientVisitData = {
+        // General Clinic Patient Visit Schema Mapping
+        const rowData = {
             Date: body.date || new Date().toISOString().split('T')[0],
             PatientName: body.name,
             Age: String(body.age || ""),
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
             action: 'create'
         };
 
-        const result = await saveToGoogleSheet(rowData);
+        const result = await savePatientVisit(rowData);
         return NextResponse.json({ success: true, data: result });
     } catch (error) {
         console.error("Save Error:", error);
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
  */
 export async function GET() {
     try {
-        const assessments = await getFromGoogleSheet();
+        const assessments = await getPatientVisits();
         return NextResponse.json(assessments);
     } catch (error) {
         console.error("Fetch Error:", error);

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getClinicSettings, saveClinicSettings, ClinicSettingsData } from "@/lib/apps-script";
+import { getClinicSettings, saveClinicSettings } from "@/lib/data-service";
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Clinic Name is required" }, { status: 400 });
         }
 
-        const result = await saveClinicSettings(body as ClinicSettingsData);
+        const result = await saveClinicSettings(body);
         return NextResponse.json({ success: true, data: result });
     } catch (error) {
         console.error("Save Settings Error:", error);

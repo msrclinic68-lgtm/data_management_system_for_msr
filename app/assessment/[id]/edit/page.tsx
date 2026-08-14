@@ -1,4 +1,4 @@
-import { getFromGoogleSheet } from "@/lib/apps-script";
+import { getPatientVisits, isSupabaseEnabled } from "@/lib/data-service";
 import { EditAssessmentForm } from "@/components/edit-assessment-form";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -14,29 +14,38 @@ interface PageProps {
 
 export default async function EditAssessmentPage(props: PageProps) {
     const params = await props.params;
-    let assessments = [];
+    let assessments: any[] = [];
     
     try {
-        const data = await getFromGoogleSheet();
-        assessments = data; // use the raw array with preserved indices
+        assessments = await getPatientVisits();
     } catch (error) {
         console.error("Failed to fetch assessment for editing:", error);
         return (
             <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-6 bg-muted/20 rounded-xl border-2 border-dashed">
                 <h2 className="text-xl font-bold text-destructive mb-2">Connection Error</h2>
-                <p className="text-muted-foreground mb-6">Could not retrieve data from Google Sheets.</p>
+                <p className="text-muted-foreground mb-6">Could not retrieve data from the database.</p>
                 <Link href="/" className="text-primary hover:underline font-medium">Return to Dashboard</Link>
             </div>
         );
     }
 
-    const assessmentIndex = Number(params.id);
+    let assessment: any = null;
+    let assessmentIndex: string | number = "";
 
-    if (isNaN(assessmentIndex) || assessmentIndex < 0 || assessmentIndex >= assessments.length) {
+    if (isSupabaseEnabled()) {
+        assessment = assessments.find(a => String(a.id) === params.id);
+        assessmentIndex = params.id;
+    } else {
+        const index = Number(params.id);
+        if (!isNaN(index) && index >= 0 && index < assessments.length) {
+            assessment = assessments[index];
+            assessmentIndex = index;
+        }
+    }
+
+    if (!assessment) {
         notFound();
     }
 
-    const assessment = assessments[assessmentIndex];
-
-    return <EditAssessmentForm assessment={assessment} assessmentIndex={assessmentIndex} />;
+    return <EditAssessmentForm assessment={assessment} assessmentIndex={assessmentIndex as any} />;
 }

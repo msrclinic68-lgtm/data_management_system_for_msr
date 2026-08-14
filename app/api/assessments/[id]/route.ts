@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getFromGoogleSheet, saveToGoogleSheet, PatientVisitData } from "@/lib/apps-script";
+import { getPatientVisits, savePatientVisit, isSupabaseEnabled } from "@/lib/data-service";
 
 export const dynamic = 'force-dynamic';
 
@@ -11,26 +11,37 @@ interface RouteParams {
 
 /**
  * PUT /api/assessments/[id]
- * Updates a patient visit record in Sheet1.
+ * Updates a patient visit record in the database.
  */
 export async function PUT(request: Request, context: RouteParams) {
     try {
         const params = await context.params;
-        const assessmentIndex = Number(params.id);
         const body = await request.json();
+        const idOrIndex = params.id;
 
         // Fetch state to merge
-        const assessments = await getFromGoogleSheet();
+        const assessments = await getPatientVisits();
+        
+        let existingRow: any = null;
+        let index = -1;
 
-        if (isNaN(assessmentIndex) || assessmentIndex < 0 || assessmentIndex >= assessments.length) {
+        if (isSupabaseEnabled()) {
+            existingRow = assessments.find(a => String(a.id) === idOrIndex);
+        } else {
+            index = Number(idOrIndex);
+            if (!isNaN(index) && index >= 0 && index < assessments.length) {
+                existingRow = assessments[index];
+            }
+        }
+
+        if (!existingRow) {
             return NextResponse.json({ error: "Record not found" }, { status: 404 });
         }
 
-        const existingRow = assessments[assessmentIndex];
         const existingMedia: string[] = body.existingMedia || [];
 
         // Patient Visit Schema Mapping
-        const updateData: PatientVisitData = {
+        const updateData: any = {
             Date: body.date ?? existingRow.Date,
             PatientName: body.name ?? existingRow.PatientName,
             Age: body.age ?? existingRow.Age,
@@ -63,17 +74,16 @@ export async function PUT(request: Request, context: RouteParams) {
                 hour12: true, timeZone: 'Asia/Kolkata'
             }).format(new Date()).replace(', ', ', '),
 
-            id: assessmentIndex,
-            rowIndex: assessmentIndex, // Passed to Google Apps Script (0-based)
+            id: isSupabaseEnabled() ? idOrIndex : undefined,
+            rowIndex: !isSupabaseEnabled() ? index : undefined,
             action: 'update'
         };
 
-        const payload: PatientVisitData = { ...updateData };
         if (body.files && body.files.length > 0) {
-            payload.files = body.files;
+            updateData.files = body.files;
         }
 
-        const result = await saveToGoogleSheet(payload);
+        const result = await savePatientVisit(updateData);
         return NextResponse.json({ success: true, data: result });
 
     } catch (error) {

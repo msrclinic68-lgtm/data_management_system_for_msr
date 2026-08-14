@@ -3,7 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { getClinicSettings } from "@/lib/apps-script";
+import { getClinicSettings } from "@/lib/data-service";
 import { Settings, Building2 } from "lucide-react";
 
 const inter = Inter({ subsets: ["latin"] });

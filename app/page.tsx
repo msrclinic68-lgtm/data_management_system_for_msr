@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { getFromGoogleSheet, getClinicSettings } from "@/lib/apps-script";
+import { getPatientVisits, getClinicSettings } from "@/lib/data-service";
 import Link from "next/link";
 import { PlusCircle, RefreshCw } from "lucide-react";
 import { DashboardTabs } from "@/components/dashboard-tabs";
@@ -14,7 +14,7 @@ export default async function Home() {
   
   try {
     const [data, settingsData] = await Promise.all([
-      getFromGoogleSheet(),
+      getPatientVisits(),
       getClinicSettings()
     ]);
     // Sanity filter: remove null, undefined, arrays, or non-object rows

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDispensedLogs, dispenseMedicine, DispensedData } from "@/lib/apps-script";
+import { getDispensedLogs, dispenseMedicine } from "@/lib/data-service";
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Medicine name and quantity are required" }, { status: 400 });
         }
 
-        const result = await dispenseMedicine(body as DispensedData);
+        const result = await dispenseMedicine(body);
         return NextResponse.json({ success: true, data: result });
     } catch (error) {
         console.error("Dispense Error:", error);

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getMedicines, saveMedicine, MedicineData } from "@/lib/apps-script";
+import { getMedicines, saveMedicine } from "@/lib/data-service";
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Invalid action" }, { status: 400 });
         }
 
-        const result = await saveMedicine(action, data as MedicineData);
+        const result = await saveMedicine(action, data);
         return NextResponse.json({ success: true, data: result });
     } catch (error) {
         console.error("Save Stock Error:", error);
