@@ -1,6 +1,9 @@
 // Google Apps Script integration
-const APPS_SCRIPT_URL = process.env.NEXT_PUBLIC_GOOGLE_APPS_SCRIPT_URL || process.env.GOOGLE_APPS_SCRIPT_URL;
-const SHARED_SECRET_TOKEN = process.env.SHARED_SECRET_TOKEN || "physio_secret_token_change_me";
+const rawUrl = process.env.NEXT_PUBLIC_GOOGLE_APPS_SCRIPT_URL || process.env.GOOGLE_APPS_SCRIPT_URL || "";
+const APPS_SCRIPT_URL = rawUrl.replace(/[<>]/g, "").trim();
+
+const rawToken = process.env.SHARED_SECRET_TOKEN || "physio_secret_token_change_me";
+const SHARED_SECRET_TOKEN = rawToken.replace(/[<>]/g, "").trim();
 
 const POST_TIMEOUT_MS = 30000; // 30 seconds for writes/reads
 

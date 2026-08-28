@@ -97,7 +97,12 @@ export async function getPatientVisits(): Promise<any[]> {
     });
     return list.map((record, index) => mapPrismaToVisits(record, index));
   }
-  return appsScript.getFromGoogleSheet();
+  const list = await appsScript.getFromGoogleSheet();
+  return (list || []).map((record, index) => ({
+    ...record,
+    id: record.id !== undefined && record.id !== null ? record.id : (record.rowIndex !== undefined && record.rowIndex !== null ? record.rowIndex : index),
+    rowIndex: record.rowIndex !== undefined && record.rowIndex !== null ? record.rowIndex : index
+  }));
 }
 
 export async function savePatientVisit(data: any): Promise<any> {

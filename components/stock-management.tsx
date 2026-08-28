@@ -125,7 +125,7 @@ export function StockManagement() {
             const response = await fetch("/api/stock", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
+                body: JSON.stringify({ action: "create", ...payload })
             });
 
             if (response.ok) {
@@ -199,9 +199,9 @@ export function StockManagement() {
             };
 
             const response = await fetch("/api/stock", {
-                method: "PUT",
+                method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(updated)
+                body: JSON.stringify({ action: "update", ...updated })
             });
 
             if (response.ok) {
