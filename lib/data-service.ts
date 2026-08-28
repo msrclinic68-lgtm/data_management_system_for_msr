@@ -29,6 +29,21 @@ if (isSupabaseEnabled()) {
   }
 }
 
+// Simple in-memory cache for Google Sheets mode to make loading super fast
+let sheetsCache: {
+  patients?: { data: any[]; timestamp: number };
+  medicines?: { data: any[]; timestamp: number };
+  dispensed?: { data: any[]; timestamp: number };
+  settings?: { data: any; timestamp: number };
+} = {};
+
+const CACHE_TTL_MS = 20000; // 20 seconds TTL
+
+const clearPatientsCache = () => { sheetsCache.patients = undefined; };
+const clearMedicinesCache = () => { sheetsCache.medicines = undefined; };
+const clearDispensedCache = () => { sheetsCache.dispensed = undefined; };
+const clearSettingsCache = () => { sheetsCache.settings = undefined; };
+
 // Mapping Helpers for Patient Visits (Assessments)
 function mapPrismaToVisits(record: any, index?: number): any {
   return {
@@ -97,15 +112,25 @@ export async function getPatientVisits(): Promise<any[]> {
     });
     return list.map((record, index) => mapPrismaToVisits(record, index));
   }
+  
+  const now = Date.now();
+  if (sheetsCache.patients && (now - sheetsCache.patients.timestamp < CACHE_TTL_MS)) {
+    return sheetsCache.patients.data;
+  }
+  
   const list = await appsScript.getFromGoogleSheet();
-  return (list || []).map((record, index) => ({
+  const mapped = (list || []).map((record, index) => ({
     ...record,
     id: record.id !== undefined && record.id !== null ? record.id : (record.rowIndex !== undefined && record.rowIndex !== null ? record.rowIndex : index),
     rowIndex: record.rowIndex !== undefined && record.rowIndex !== null ? record.rowIndex : index
   }));
+  
+  sheetsCache.patients = { data: mapped, timestamp: now };
+  return mapped;
 }
 
 export async function savePatientVisit(data: any): Promise<any> {
+  clearPatientsCache();
   if (prisma && isSupabaseEnabled()) {
     const mappedData = mapVisitsToPrisma(data);
     
@@ -157,8 +182,14 @@ export async function getMedicines(): Promise<any[]> {
       rowIndex: index
     }));
   }
+  
+  const now = Date.now();
+  if (sheetsCache.medicines && (now - sheetsCache.medicines.timestamp < CACHE_TTL_MS)) {
+    return sheetsCache.medicines.data;
+  }
+  
   const list: any[] = await appsScript.getMedicines();
-  return (list || []).map((m, index) => ({
+  const mapped = (list || []).map((m, index) => ({
     id: m.id || m.ID || "",
     name: m.name || m.Name || "",
     batchType: m.batchType || m.BatchType || "",
@@ -171,9 +202,14 @@ export async function getMedicines(): Promise<any[]> {
     lowStockThreshold: Number(m.lowStockThreshold !== undefined ? m.lowStockThreshold : (m.LowStockThreshold !== undefined ? m.LowStockThreshold : 10)),
     rowIndex: m.rowIndex !== undefined ? m.rowIndex : index
   }));
+  
+  sheetsCache.medicines = { data: mapped, timestamp: now };
+  return mapped;
 }
 
 export async function saveMedicine(action: 'create' | 'update' | 'delete', data: any): Promise<any> {
+  clearMedicinesCache();
+  clearPatientsCache();
   if (prisma && isSupabaseEnabled()) {
     if (action === "create") {
       const created = await prisma.medicine.create({
@@ -236,8 +272,14 @@ export async function getDispensedLogs(): Promise<any[]> {
       timestamp: log.timestamp.toISOString()
     }));
   }
+  
+  const now = Date.now();
+  if (sheetsCache.dispensed && (now - sheetsCache.dispensed.timestamp < CACHE_TTL_MS)) {
+    return sheetsCache.dispensed.data;
+  }
+  
   const list: any[] = await appsScript.getDispensedLogs();
-  return (list || []).map(log => ({
+  const mapped = (list || []).map(log => ({
     id: log.id || log.ID || '',
     patientName: log.patientName || log.PatientName || '',
     patientSlug: log.patientSlug || log.PatientSlug || '',
@@ -247,9 +289,15 @@ export async function getDispensedLogs(): Promise<any[]> {
     type: log.type || log.Type || '',
     timestamp: log.timestamp || log.Timestamp || ''
   }));
+  
+  sheetsCache.dispensed = { data: mapped, timestamp: now };
+  return mapped;
 }
 
 export async function dispenseMedicine(data: any): Promise<any> {
+  clearMedicinesCache();
+  clearDispensedCache();
+  clearPatientsCache();
   if (prisma && isSupabaseEnabled()) {
     // Transactional logic: Acquire a lock via Prisma Transaction
     return await prisma.$transaction(async (tx) => {
@@ -326,10 +374,19 @@ export async function getClinicSettings(): Promise<any> {
       clinicContact: settings.clinicContact
     };
   }
-  return appsScript.getClinicSettings();
+  
+  const now = Date.now();
+  if (sheetsCache.settings && (now - sheetsCache.settings.timestamp < CACHE_TTL_MS)) {
+    return sheetsCache.settings.data;
+  }
+  
+  const settings = await appsScript.getClinicSettings();
+  sheetsCache.settings = { data: settings, timestamp: now };
+  return settings;
 }
 
 export async function saveClinicSettings(data: any): Promise<any> {
+  clearSettingsCache();
   if (prisma && isSupabaseEnabled()) {
     const current = await prisma.clinicSettings.findFirst();
     const payload = {
