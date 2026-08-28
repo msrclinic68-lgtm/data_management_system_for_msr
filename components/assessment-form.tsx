@@ -24,7 +24,6 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Camera, Video, X, Upload, FileVideo, FileImage, Plus, User, ClipboardList, Activity, Stethoscope, FileText, ArrowLeft, Loader2, RefreshCw, Pill } from "lucide-react";
 import { sanitizeFormData, validateFileSize, checkDuplicate, compressImage, calculatePayloadSize, formatBytes } from "@/lib/utils-data";
-import { getFromGoogleSheet } from "@/lib/apps-script";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Autocomplete } from "@/components/ui/autocomplete";
 
@@ -352,7 +351,9 @@ export function AssessmentForm() {
             }
 
             // Verify duplicates
-            const allSheets = await getFromGoogleSheet();
+            const dupRes = await fetch("/api/assessments");
+            if (!dupRes.ok) throw new Error("Failed to check duplicate records.");
+            const allSheets = await dupRes.json();
             const isDup = checkDuplicate(allSheets, values.name, values.date);
             if (isDup) {
                 const conf = window.confirm(`A patient record already exists for ${values.name} on ${values.date}. Save anyway?`);
