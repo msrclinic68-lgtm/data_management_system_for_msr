@@ -22,9 +22,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { Camera, Video, X, Upload, FileVideo, FileImage, Plus, User, ClipboardList, Activity, Stethoscope, FileText, ArrowLeft, Loader2, RefreshCw } from "lucide-react";
+import { Camera, Video, X, Upload, FileVideo, FileImage, Plus, User, ClipboardList, Activity, Stethoscope, FileText, ArrowLeft, Loader2, RefreshCw, Pill } from "lucide-react";
 import { sanitizeFormData, validateFileSize, checkDuplicate, compressImage, calculatePayloadSize, formatBytes } from "@/lib/utils-data";
 import { getFromGoogleSheet } from "@/lib/apps-script";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Autocomplete } from "@/components/ui/autocomplete";
 
 const formSchema = z.object({
     date: z.string(),
@@ -52,6 +54,62 @@ const formSchema = z.object({
 export function AssessmentForm() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const router = useRouter();
+
+    // Medicine prescribing states
+    const [allMedicines, setAllMedicines] = useState<any[]>([]);
+    const [prescribedMedicines, setPrescribedMedicines] = useState<{ medicineName: string; quantity: number; dosage: string }[]>([]);
+    const [currentSelection, setCurrentSelection] = useState({ medicineName: "", quantity: "", dosage: "" });
+
+    // Load medicines for autocomplete
+    useEffect(() => {
+        async function fetchStock() {
+            try {
+                const res = await fetch("/api/stock");
+                if (res.ok) {
+                    const data = await res.json();
+                    setAllMedicines(data);
+                }
+            } catch (err) {
+                console.error("Failed to load stock:", err);
+            }
+        }
+        fetchStock();
+    }, []);
+
+    const handleAddMedicine = () => {
+        if (!currentSelection.medicineName) {
+            alert("Please select a medicine.");
+            return;
+        }
+        const qty = Number(currentSelection.quantity);
+        if (isNaN(qty) || qty <= 0) {
+            alert("Please enter a valid quantity.");
+            return;
+        }
+
+        const selectedMed = allMedicines.find(m => m.name === currentSelection.medicineName);
+        if (selectedMed) {
+            const avail = Number(selectedMed.availableStock) || 0;
+            // Check if quantity exceeds available stock
+            if (qty > avail) {
+                alert(`Insufficient stock. Only ${avail} units of ${currentSelection.medicineName} are available.`);
+                return;
+            }
+        }
+
+        setPrescribedMedicines(prev => [...prev, {
+            medicineName: currentSelection.medicineName,
+            quantity: qty,
+            dosage: currentSelection.dosage
+        }]);
+
+        // Reset inputs
+        setCurrentSelection({ medicineName: "", quantity: "", dosage: "" });
+    };
+
+    const handleRemoveMedicine = (index: number) => {
+        setPrescribedMedicines(prev => prev.filter((_, i) => i !== index));
+    };
 
     // Media upload state
     const [mediaFiles, setMediaFiles] = useState<{ file: File; base64: string; type: 'image' | 'video' }[]>([]);
@@ -276,6 +334,23 @@ export function AssessmentForm() {
         setIsSubmitting(true);
 
         try {
+            // Check stock levels first
+            for (const item of prescribedMedicines) {
+                const med = allMedicines.find(m => m.name === item.medicineName);
+                if (med) {
+                    const avail = Number(med.availableStock) || 0;
+                    if (item.quantity > avail) {
+                        alert(`Insufficient stock for ${item.medicineName}. Available: ${avail}. Requested: ${item.quantity}`);
+                        setIsSubmitting(false);
+                        return;
+                    }
+                } else {
+                    alert(`Medicine ${item.medicineName} not found in inventory.`);
+                    setIsSubmitting(false);
+                    return;
+                }
+            }
+
             // Verify duplicates
             const allSheets = await getFromGoogleSheet();
             const isDup = checkDuplicate(allSheets, values.name, values.date);
@@ -287,7 +362,17 @@ export function AssessmentForm() {
                 }
             }
 
-            const sanitized = sanitizeFormData(values);
+            // Append medicines list to treatment plan for visibility in reports
+            let fullTreatmentPlan = values.treatmentPlan || "";
+            if (prescribedMedicines.length > 0) {
+                const medLines = prescribedMedicines.map(m => `- ${m.medicineName} (Qty: ${m.quantity}) [Dosage: ${m.dosage || 'As directed'}]`).join("\n");
+                fullTreatmentPlan = fullTreatmentPlan ? `${fullTreatmentPlan}\n\nPrescribed Medicines:\n${medLines}` : `Prescribed Medicines:\n${medLines}`;
+            }
+
+            const sanitized = sanitizeFormData({
+                ...values,
+                treatmentPlan: fullTreatmentPlan
+            });
 
             // Format files for API
             const filesPayload = mediaFiles.map(m => ({
@@ -313,6 +398,27 @@ export function AssessmentForm() {
             if (!response.ok) {
                 const err = await response.json();
                 throw new Error(err.error || "Save operation failed.");
+            }
+
+            // Real-time stock deduction: Dispense prescribed medicines
+            const patientSlug = values.name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+            for (const item of prescribedMedicines) {
+                try {
+                    await fetch("/api/dispense", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            patientName: values.name,
+                            patientSlug,
+                            medicineName: item.medicineName,
+                            quantity: item.quantity,
+                            dosage: item.dosage || "",
+                            type: "patient"
+                        })
+                    });
+                } catch (dispenseErr) {
+                    console.error(`Failed to deduct stock for ${item.medicineName}:`, dispenseErr);
+                }
             }
 
             router.push("/");
@@ -641,11 +747,106 @@ export function AssessmentForm() {
                     </CardContent>
                 </Card>
 
-                {/* 4. Media Suite */}
+                {/* Medicine Prescription & Real-time Dispensing */}
+                <Card className="border-slate-200 shadow-md rounded-2xl bg-white">
+                    <CardHeader className="bg-slate-50/50 pb-4 border-b border-slate-100 flex flex-row items-center gap-3">
+                        <Pill className="h-5 w-5 text-emerald-600 font-bold animate-pulse" />
+                        <CardTitle className="text-lg font-bold">4. Prescribe & Dispense Medicines (Real-Time Stock Deduction)</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-6 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase">Search & Select Medicine</label>
+                                <div className="mt-1">
+                                    <Autocomplete
+                                        options={allMedicines.map((med) => ({
+                                            label: med.name,
+                                            value: med.name,
+                                            availableStock: Number(med.availableStock) || 0
+                                        }))}
+                                        value={currentSelection.medicineName}
+                                        onChange={(val) => setCurrentSelection({ ...currentSelection, medicineName: val })}
+                                        placeholder="Type medicine name..."
+                                        emptyMessage="No matching medicine in stock."
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase">Quantity</label>
+                                <Input
+                                    type="number"
+                                    value={currentSelection.quantity}
+                                    onChange={(e) => setCurrentSelection({ ...currentSelection, quantity: e.target.value })}
+                                    className="rounded-xl h-11 border-slate-200 mt-1 shadow-sm font-semibold"
+                                    placeholder="e.g. 10"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase">Dosage Advice</label>
+                                <div className="flex gap-2 mt-1">
+                                    <Input
+                                        type="text"
+                                        value={currentSelection.dosage}
+                                        onChange={(e) => setCurrentSelection({ ...currentSelection, dosage: e.target.value })}
+                                        className="rounded-xl h-11 border-slate-200 shadow-sm flex-1 font-semibold"
+                                        placeholder="e.g. 1-0-1 after food"
+                                    />
+                                    <Button
+                                        type="button"
+                                        onClick={handleAddMedicine}
+                                        className="h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                                    >
+                                        Add
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {prescribedMedicines.length > 0 ? (
+                            <div className="border border-slate-100 rounded-xl overflow-hidden mt-4">
+                                <Table>
+                                    <TableHeader className="bg-slate-50">
+                                        <TableRow>
+                                            <TableHead className="font-bold text-slate-700">Medicine Name</TableHead>
+                                            <TableHead className="font-bold text-slate-700 w-24">Quantity</TableHead>
+                                            <TableHead className="font-bold text-slate-700">Dosage Advice</TableHead>
+                                            <TableHead className="w-16"></TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {prescribedMedicines.map((item, idx) => (
+                                            <TableRow key={idx}>
+                                                <TableCell className="font-bold text-slate-800 text-sm">{item.medicineName}</TableCell>
+                                                <TableCell className="font-bold text-slate-700 text-sm">{item.quantity}</TableCell>
+                                                <TableCell className="text-slate-600 font-bold text-sm">{item.dosage || "-"}</TableCell>
+                                                <TableCell>
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        onClick={() => handleRemoveMedicine(idx)}
+                                                        className="text-red-500 hover:text-red-700 hover:bg-red-50 h-8 w-8 p-0 rounded-lg"
+                                                    >
+                                                        <X className="h-4 w-4" />
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        ) : (
+                            <div className="text-center p-6 bg-slate-50/50 rounded-xl border border-dashed border-slate-200 mt-4">
+                                <p className="text-xs font-bold text-slate-400">No medicines prescribed for this visit yet. Select one above and click "Add".</p>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* 5. Media Suite */}
                 <Card className="border-slate-200 shadow-md rounded-2xl bg-white">
                     <CardHeader className="bg-slate-50/50 pb-4 border-b border-slate-100 flex flex-row items-center gap-3">
                         <Camera className="h-5 w-5 text-primary" />
-                        <CardTitle className="text-lg font-bold">4. Attachment & Clinical Reports Media Suite</CardTitle>
+                        <CardTitle className="text-lg font-bold">5. Attachment & Clinical Reports Media Suite</CardTitle>
                     </CardHeader>
                     <CardContent className="p-6 space-y-6">
                         {/* File Upload Selector */}

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Pill, PlusCircle, Check, Loader2, AlertCircle } from "lucide-react";
+import { Autocomplete } from "@/components/ui/autocomplete";
 import { cn } from "@/lib/utils";
 
 interface Medicine {
@@ -155,23 +156,19 @@ export function DispenseDialog({ patientName, patientSlug, onSuccess, trigger }:
                                     <Loader2 className="h-4 w-4 animate-spin text-primary" /> Loading medicine stock...
                                 </div>
                             ) : (
-                                <select
-                                    required
-                                    value={fields.medicineName}
-                                    onChange={(e) => setFields({ ...fields, medicineName: e.target.value })}
-                                    className="flex h-10 w-full rounded-xl border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-primary mt-1"
-                                >
-                                    <option value="">-- Choose Medicine --</option>
-                                    {medicines.map((med, idx) => {
-                                        const avail = Number(med.availableStock) || 0;
-                                        const name = med.name;
-                                        return (
-                                            <option key={med.id || idx} value={name} disabled={avail <= 0}>
-                                                {name} (Avail: {avail} {med.unitMeasurement})
-                                            </option>
-                                        );
-                                    })}
-                                </select>
+                                <div className="mt-1">
+                                    <Autocomplete
+                                        options={medicines.map((med) => ({
+                                            label: med.name,
+                                            value: med.name,
+                                            availableStock: Number(med.availableStock) || 0
+                                        }))}
+                                        value={fields.medicineName}
+                                        onChange={(val) => setFields({ ...fields, medicineName: val })}
+                                        placeholder="Type to search medicine..."
+                                        emptyMessage="No matching medicine in stock."
+                                    />
+                                </div>
                             )}
                         </div>
 
