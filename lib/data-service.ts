@@ -152,7 +152,20 @@ export async function getMedicines(): Promise<any[]> {
       rowIndex: index
     }));
   }
-  return appsScript.getMedicines();
+  const list: any[] = await appsScript.getMedicines();
+  return (list || []).map((m, index) => ({
+    id: m.id || m.ID || "",
+    name: m.name || m.Name || "",
+    batchType: m.batchType || m.BatchType || "",
+    unit: m.unit || m.Unit || "Tablet",
+    unitMeasurement: m.unitMeasurement || m.UnitMeasurement || "mg",
+    totalStock: Number(m.totalStock !== undefined ? m.totalStock : (m.TotalStock !== undefined ? m.TotalStock : 0)),
+    availableStock: Number(m.availableStock !== undefined ? m.availableStock : (m.AvailableStock !== undefined ? m.AvailableStock : 0)),
+    pendingStock: Number(m.pendingStock !== undefined ? m.pendingStock : (m.PendingStock !== undefined ? m.PendingStock : 0)),
+    outgoingStock: Number(m.outgoingStock !== undefined ? m.outgoingStock : (m.OutgoingStock !== undefined ? m.OutgoingStock : 0)),
+    lowStockThreshold: Number(m.lowStockThreshold !== undefined ? m.lowStockThreshold : (m.LowStockThreshold !== undefined ? m.LowStockThreshold : 10)),
+    rowIndex: m.rowIndex !== undefined ? m.rowIndex : index
+  }));
 }
 
 export async function saveMedicine(action: 'create' | 'update' | 'delete', data: any): Promise<any> {
@@ -218,7 +231,17 @@ export async function getDispensedLogs(): Promise<any[]> {
       timestamp: log.timestamp.toISOString()
     }));
   }
-  return appsScript.getDispensedLogs();
+  const list: any[] = await appsScript.getDispensedLogs();
+  return (list || []).map(log => ({
+    id: log.id || log.ID || '',
+    patientName: log.patientName || log.PatientName || '',
+    patientSlug: log.patientSlug || log.PatientSlug || '',
+    medicineName: log.medicineName || log.MedicineName || '',
+    quantity: Number(log.quantity !== undefined ? log.quantity : (log.Quantity !== undefined ? log.Quantity : 0)),
+    dosage: log.dosage || log.Dosage || '',
+    type: log.type || log.Type || '',
+    timestamp: log.timestamp || log.Timestamp || ''
+  }));
 }
 
 export async function dispenseMedicine(data: any): Promise<any> {
