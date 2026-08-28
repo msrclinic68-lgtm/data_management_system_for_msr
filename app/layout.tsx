@@ -69,15 +69,11 @@ export default async function RootLayout({
           <div className="container mx-auto flex h-14 sm:h-16 items-center justify-between px-3 sm:px-4">
             <Link href="/" className="flex items-center gap-2 sm:gap-3">
               <div className="relative w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden border-2 border-primary flex-shrink-0 bg-slate-100 flex items-center justify-center">
-                {settings.clinicLogo ? (
-                  <img
-                    src={settings.clinicLogo}
-                    alt={settings.clinicName}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <Building2 className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-                )}
+                <img
+                  src={settings.clinicLogo || "/logo.jpg"}
+                  alt={settings.clinicName}
+                  className="w-full h-full object-cover"
+                />
               </div>
               <span className="text-base sm:text-xl font-bold text-primary tracking-tight truncate max-w-[150px] sm:max-w-none">
                 {settings.clinicName || "Clinic Manager"}
