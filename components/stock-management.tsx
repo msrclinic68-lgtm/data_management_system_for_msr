@@ -222,13 +222,16 @@ export function StockManagement() {
     };
 
     // Filters
-    const filteredMedicines = medicines.filter(med => 
-        med.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        med.type.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredMedicines = (medicines || []).filter(med => {
+        if (!med) return false;
+        const name = String(med.name || "").toLowerCase();
+        const type = String(med.type || "").toLowerCase();
+        const query = (searchQuery || "").toLowerCase();
+        return name.includes(query) || type.includes(query);
+    });
 
-    const lowStockItems = medicines.filter(med => 
-        med.availableStock <= med.lowStockThreshold
+    const lowStockItems = (medicines || []).filter(med => 
+        med && (Number(med.availableStock) || 0) <= (Number(med.lowStockThreshold) || 10)
     );
 
     return (
