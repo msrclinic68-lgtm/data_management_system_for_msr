@@ -763,11 +763,13 @@ export function EditAssessmentForm({ assessment, assessmentIndex }: EditFormProp
                                 <label className="text-xs font-bold text-slate-500 uppercase">Search & Select Medicine</label>
                                 <div className="mt-1">
                                     <Autocomplete
-                                        options={allMedicines.map((med) => ({
-                                            label: med.name,
-                                            value: med.name,
-                                            availableStock: Number(med.availableStock) || 0
-                                        }))}
+                                        options={(allMedicines || [])
+                                            .filter((med) => med && typeof med.name === "string")
+                                            .map((med) => ({
+                                                label: med.name,
+                                                value: med.name,
+                                                availableStock: Number(med.availableStock) || 0
+                                            }))}
                                         value={currentSelection.medicineName}
                                         onChange={(val) => setCurrentSelection({ ...currentSelection, medicineName: val })}
                                         placeholder="Type medicine name..."

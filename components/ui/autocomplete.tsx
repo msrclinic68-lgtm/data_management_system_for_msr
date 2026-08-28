@@ -28,18 +28,21 @@ export function Autocomplete({
   
   // Sync initial value label
   React.useEffect(() => {
-    const selectedOption = options.find((opt) => opt.value === value);
-    setSearchTerm(selectedOption ? selectedOption.label : value);
+    const selectedOption = (options || []).find((opt) => opt && opt.value === value);
+    setSearchTerm(selectedOption ? selectedOption.label : value || "");
   }, [value, options]);
 
   // Filter options alphabetically and search term match
   const filteredOptions = React.useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    const matches = options.filter((opt) =>
+    const term = (searchTerm || "").trim().toLowerCase();
+    const validOptions = Array.isArray(options) 
+      ? options.filter((opt) => opt && typeof opt.label === "string" && typeof opt.value === "string") 
+      : [];
+    const matches = validOptions.filter((opt) =>
       opt.label.toLowerCase().includes(term)
     );
     // Sort alphabetically
-    return matches.sort((a, b) => a.label.localeCompare(b.label));
+    return matches.sort((a, b) => (a.label || "").localeCompare(b.label || ""));
   }, [searchTerm, options]);
 
   // Highlight reset when filtered options change
