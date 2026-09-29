@@ -18,6 +18,7 @@ interface Medicine {
     Unit?: string;
     unitMeasurement: string;
     UnitMeasurement?: string;
+    oldName?: string;
 }
 
 interface DispenseDialogProps {
@@ -161,7 +162,8 @@ export function DispenseDialog({ patientName, patientSlug, onSuccess, trigger }:
                                         options={medicines.map((med) => ({
                                             label: med.name,
                                             value: med.name,
-                                            availableStock: Number(med.availableStock) || 0
+                                            availableStock: Number(med.availableStock) || 0,
+                                            oldName: med.oldName
                                         }))}
                                         value={fields.medicineName}
                                         onChange={(val) => setFields({ ...fields, medicineName: val })}

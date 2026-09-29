@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import * as appsScript from "./apps-script";
+import { NEW_TO_OLD_NAME_MAP, getCleanMedicineName } from "./medicines-catalog";
 
 export const isSupabaseEnabled = () => 
   !!process.env.DATABASE_URL && 
@@ -168,19 +169,26 @@ export async function getMedicines(): Promise<any[]> {
     const list = await prisma.medicine.findMany({
       orderBy: { name: 'asc' }
     });
-    return list.map((m, index) => ({
-      id: m.id,
-      name: m.name,
-      batchType: m.batchType || '',
-      unit: m.unit || '',
-      unitMeasurement: m.unitMeasurement || '',
-      totalStock: m.totalStock,
-      availableStock: m.availableStock,
-      pendingStock: m.pendingStock,
-      outgoingStock: m.outgoingStock,
-      lowStockThreshold: m.lowStockThreshold,
-      rowIndex: index
-    }));
+    return list
+      .map((m, index) => ({
+        id: m.id,
+        name: m.name,
+        oldName: NEW_TO_OLD_NAME_MAP[m.name] || NEW_TO_OLD_NAME_MAP[(m.name || '').toLowerCase()] || '',
+        batchType: m.batchType || '',
+        unit: m.unit || '',
+        unitMeasurement: m.unitMeasurement || '',
+        totalStock: m.totalStock,
+        availableStock: m.availableStock,
+        pendingStock: m.pendingStock,
+        outgoingStock: m.outgoingStock,
+        lowStockThreshold: m.lowStockThreshold,
+        rowIndex: index
+      }))
+      .sort((a, b) => {
+        const cleanA = getCleanMedicineName(a.name);
+        const cleanB = getCleanMedicineName(b.name);
+        return cleanA.localeCompare(cleanB, undefined, { sensitivity: 'base' });
+      });
   }
   
   const now = Date.now();
@@ -189,19 +197,29 @@ export async function getMedicines(): Promise<any[]> {
   }
   
   const list: any[] = await appsScript.getMedicines();
-  const mapped = (list || []).map((m, index) => ({
-    id: m.id || m.ID || "",
-    name: m.name || m.Name || "",
-    batchType: m.batchType || m.BatchType || "",
-    unit: m.unit || m.Unit || "Tablet",
-    unitMeasurement: m.unitMeasurement || m.UnitMeasurement || "mg",
-    totalStock: Number(m.totalStock !== undefined ? m.totalStock : (m.TotalStock !== undefined ? m.TotalStock : 0)),
-    availableStock: Number(m.availableStock !== undefined ? m.availableStock : (m.AvailableStock !== undefined ? m.AvailableStock : 0)),
-    pendingStock: Number(m.pendingStock !== undefined ? m.pendingStock : (m.PendingStock !== undefined ? m.PendingStock : 0)),
-    outgoingStock: Number(m.outgoingStock !== undefined ? m.outgoingStock : (m.OutgoingStock !== undefined ? m.OutgoingStock : 0)),
-    lowStockThreshold: Number(m.lowStockThreshold !== undefined ? m.lowStockThreshold : (m.LowStockThreshold !== undefined ? m.LowStockThreshold : 10)),
-    rowIndex: m.rowIndex !== undefined ? m.rowIndex : index
-  }));
+  const mapped = (list || [])
+    .map((m, index) => {
+      const medName = m.name || m.Name || "";
+      return {
+        id: m.id || m.ID || "",
+        name: medName,
+        oldName: m.oldName || m.OldName || NEW_TO_OLD_NAME_MAP[medName] || NEW_TO_OLD_NAME_MAP[medName.toLowerCase()] || "",
+        batchType: m.batchType || m.BatchType || "",
+        unit: m.unit || m.Unit || "Tablet",
+        unitMeasurement: m.unitMeasurement || m.UnitMeasurement || "mg",
+        totalStock: Number(m.totalStock !== undefined ? m.totalStock : (m.TotalStock !== undefined ? m.TotalStock : 0)),
+        availableStock: Number(m.availableStock !== undefined ? m.availableStock : (m.AvailableStock !== undefined ? m.AvailableStock : 0)),
+        pendingStock: Number(m.pendingStock !== undefined ? m.pendingStock : (m.PendingStock !== undefined ? m.PendingStock : 0)),
+        outgoingStock: Number(m.outgoingStock !== undefined ? m.outgoingStock : (m.OutgoingStock !== undefined ? m.OutgoingStock : 0)),
+        lowStockThreshold: Number(m.lowStockThreshold !== undefined ? m.lowStockThreshold : (m.LowStockThreshold !== undefined ? m.LowStockThreshold : 10)),
+        rowIndex: m.rowIndex !== undefined ? m.rowIndex : index
+      };
+    })
+    .sort((a, b) => {
+      const cleanA = getCleanMedicineName(a.name);
+      const cleanB = getCleanMedicineName(b.name);
+      return cleanA.localeCompare(cleanB, undefined, { sensitivity: 'base' });
+    });
   
   sheetsCache.medicines = { data: mapped, timestamp: now };
   return mapped;

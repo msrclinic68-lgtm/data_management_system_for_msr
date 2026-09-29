@@ -765,7 +765,8 @@ export function AssessmentForm() {
                                             .map((med) => ({
                                                 label: med.name,
                                                 value: med.name,
-                                                availableStock: Number(med.availableStock) || 0
+                                                availableStock: Number(med.availableStock) || 0,
+                                                oldName: med.oldName
                                             }))}
                                         value={currentSelection.medicineName}
                                         onChange={(val) => setCurrentSelection({ ...currentSelection, medicineName: val })}

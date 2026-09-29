@@ -28,6 +28,7 @@ interface Medicine {
     pendingStock: number;
     outgoingStock: number;
     lowStockThreshold: number;
+    oldName?: string;
 }
 
 interface DispensedRecord {
@@ -226,8 +227,10 @@ export function StockManagement() {
         if (!med) return false;
         const name = String(med.name || "").toLowerCase();
         const type = String(med.type || "").toLowerCase();
-        const query = (searchQuery || "").toLowerCase();
-        return name.includes(query) || type.includes(query);
+        const oldName = String(med.oldName || "").toLowerCase();
+        const query = (searchQuery || "").trim().toLowerCase();
+        if (!query) return true;
+        return name.includes(query) || type.includes(query) || oldName.includes(query);
     });
 
     const lowStockItems = (medicines || []).filter(med => 
@@ -469,6 +472,11 @@ export function StockManagement() {
                                                     <TableRow key={med.id || idx}>
                                                         <TableCell className="px-4 py-3">
                                                             <div className="font-black text-slate-800 text-sm uppercase">{med.name}</div>
+                                                            {med.oldName && (
+                                                                <div className="text-[11px] text-slate-400 font-medium italic">
+                                                                    Formerly: {med.oldName}
+                                                                </div>
+                                                            )}
                                                             <div className="text-[10px] text-slate-400">Unit: {med.unitMeasurement}</div>
                                                         </TableCell>
                                                         <TableCell className="text-center px-4 py-3">

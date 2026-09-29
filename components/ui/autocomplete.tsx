@@ -3,9 +3,12 @@
 import * as React from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { filterAndRankMedicines, AutocompleteOption, NEW_TO_OLD_NAME_MAP } from "@/lib/medicines-catalog";
+
+export type { AutocompleteOption };
 
 interface AutocompleteProps {
-  options: { label: string; value: string; availableStock?: number }[];
+  options: AutocompleteOption[];
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -32,17 +35,9 @@ export function Autocomplete({
     setSearchTerm(selectedOption ? selectedOption.label : value || "");
   }, [value, options]);
 
-  // Filter options alphabetically and search term match
+  // Filter options with core-name priority and alphabetical sorting
   const filteredOptions = React.useMemo(() => {
-    const term = (searchTerm || "").trim().toLowerCase();
-    const validOptions = Array.isArray(options) 
-      ? options.filter((opt) => opt && typeof opt.label === "string" && typeof opt.value === "string") 
-      : [];
-    const matches = validOptions.filter((opt) =>
-      opt.label.toLowerCase().includes(term)
-    );
-    // Sort alphabetically
-    return matches.sort((a, b) => (a.label || "").localeCompare(b.label || ""));
+    return filterAndRankMedicines(searchTerm, options);
   }, [searchTerm, options]);
 
   // Highlight reset when filtered options change
@@ -56,7 +51,7 @@ export function Autocomplete({
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
         // Reset search term to current selected value label if user typed but did not select
-        const currentOption = options.find((opt) => opt.value === value);
+        const currentOption = (options || []).find((opt) => opt && opt.value === value);
         setSearchTerm(currentOption ? currentOption.label : value);
       }
     }
@@ -134,40 +129,48 @@ export function Autocomplete({
       </div>
 
       {isOpen && !disabled && (
-        <div className="absolute z-50 w-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto py-1">
+        <div className="absolute z-50 w-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl max-h-72 overflow-y-auto py-1.5 divide-y divide-slate-100">
           {filteredOptions.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-slate-500 italic">{emptyMessage}</div>
+            <div className="px-3 py-3 text-sm text-slate-500 italic text-center">{emptyMessage}</div>
           ) : (
             filteredOptions.map((opt, index) => {
               const isSelected = opt.value === value;
               const isHighlighted = index === highlightedIndex;
               const hasStock = opt.availableStock !== undefined;
               const isLowStock = hasStock && opt.availableStock! <= 0;
+              const oldNameDisplay = opt.oldName || NEW_TO_OLD_NAME_MAP[opt.label];
               
               return (
                 <button
-                  key={opt.value}
+                  key={`${opt.value}-${index}`}
                   type="button"
                   onClick={() => handleSelectOption(opt.value, opt.label)}
                   className={cn(
-                    "w-full text-left px-3 py-2 text-sm flex items-center justify-between transition-colors",
+                    "w-full text-left px-3.5 py-2.5 text-sm flex items-center justify-between transition-colors",
                     isHighlighted ? "bg-slate-100 text-slate-900" : "",
-                    isSelected ? "bg-slate-50 font-bold text-primary" : "text-slate-700 font-semibold",
+                    isSelected ? "bg-primary/5 font-bold text-primary" : "text-slate-700 font-semibold",
                     "hover:bg-slate-50"
                   )}
                 >
-                  <span className="truncate flex items-center gap-2">
-                    <span>{opt.label}</span>
+                  <div className="truncate flex flex-col min-w-0 pr-2">
+                    <span className="truncate font-semibold text-slate-900 text-sm">{opt.label}</span>
+                    {oldNameDisplay && (
+                      <span className="text-[11px] font-normal text-slate-400 truncate">
+                        Formerly: <span className="italic font-medium text-slate-500">{oldNameDisplay}</span>
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 ml-auto">
                     {hasStock && (
                       <span className={cn(
-                        "text-[10px] font-bold px-1.5 py-0.5 rounded-full",
-                        isLowStock ? "bg-red-100 text-red-700" : "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                        "text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0",
+                        isLowStock ? "bg-red-50 text-red-700 border border-red-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"
                       )}>
                         {opt.availableStock} in stock
                       </span>
                     )}
-                  </span>
-                  {isSelected && <Check className="h-4 w-4 text-primary shrink-0" />}
+                    {isSelected && <Check className="h-4 w-4 text-primary shrink-0" />}
+                  </div>
                 </button>
               );
             })
