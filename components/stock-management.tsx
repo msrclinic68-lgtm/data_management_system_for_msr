@@ -14,7 +14,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { PlusCircle, Search, RefreshCw, AlertTriangle, Package, History, ArrowUpRight, Scale, ArrowDownRight, Edit3, ClipboardList } from "lucide-react";
+import { PlusCircle, Search, RefreshCw, AlertTriangle, Package, History, ArrowUpRight, Scale, ArrowDownRight, Edit3, ClipboardList, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DispenseDialog } from "@/components/dispense-dialog";
 
@@ -29,6 +29,7 @@ interface Medicine {
     outgoingStock: number;
     lowStockThreshold: number;
     oldName?: string;
+    rowIndex?: number;
 }
 
 interface DispensedRecord {
@@ -52,16 +53,31 @@ export function StockManagement() {
     // Modals open state
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [isAdjustOpen, setIsAdjustOpen] = useState(false);
+    const [isEditOpen, setIsEditOpen] = useState(false);
+    const [isDeleteOpen, setIsDeleteOpen] = useState(false);
     const [selectedMed, setSelectedMed] = useState<Medicine | null>(null);
 
     // Form inputs
     const [newMed, setNewMed] = useState({
         name: "",
+        oldName: "",
         type: "Tablet",
         unitMeasurement: "mg",
         availableStock: "",
         pendingStock: "",
         lowStockThreshold: "10"
+    });
+
+    const [editMed, setEditMed] = useState({
+        id: "",
+        name: "",
+        oldName: "",
+        type: "Tablet",
+        unitMeasurement: "mg",
+        totalStock: "",
+        availableStock: "",
+        lowStockThreshold: "10",
+        rowIndex: 0
     });
 
     const [adjustment, setAdjustment] = useState({
@@ -113,7 +129,8 @@ export function StockManagement() {
             const pending = Number(newMed.pendingStock) || 0;
 
             const payload: Medicine = {
-                name: newMed.name,
+                name: newMed.name.trim(),
+                oldName: newMed.oldName.trim(),
                 type: newMed.type,
                 unitMeasurement: newMed.unitMeasurement,
                 totalStock: available + pending,
@@ -130,9 +147,10 @@ export function StockManagement() {
             });
 
             if (response.ok) {
-                setSuccessMessage("Medicine added successfully!");
+                setSuccessMessage(`"${newMed.name}" added successfully!`);
                 setNewMed({
                     name: "",
+                    oldName: "",
                     type: "Tablet",
                     unitMeasurement: "mg",
                     availableStock: "",
@@ -147,6 +165,87 @@ export function StockManagement() {
             }
         } catch (error) {
             setErrorMessage("Failed to save. Check your connection.");
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+    // Edit Medicine
+    const handleEditMedicine = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editMed.name || !selectedMed) return;
+
+        setIsActionLoading(true);
+        setErrorMessage("");
+        setSuccessMessage("");
+
+        try {
+            const payload = {
+                id: editMed.id || (selectedMed.id !== undefined ? String(selectedMed.id) : ""),
+                originalName: selectedMed.name,
+                name: editMed.name.trim(),
+                oldName: editMed.oldName.trim(),
+                type: editMed.type,
+                unitMeasurement: editMed.unitMeasurement,
+                totalStock: Number(editMed.totalStock) || 0,
+                availableStock: Number(editMed.availableStock) || 0,
+                lowStockThreshold: Number(editMed.lowStockThreshold) || 10,
+                rowIndex: editMed.rowIndex !== undefined ? editMed.rowIndex : selectedMed.rowIndex
+            };
+
+            const response = await fetch("/api/stock", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "update", ...payload })
+            });
+
+            if (response.ok) {
+                setSuccessMessage(`"${editMed.name}" updated successfully!`);
+                setIsEditOpen(false);
+                setSelectedMed(null);
+                loadData();
+            } else {
+                const err = await response.json();
+                setErrorMessage(err.error || "Failed to update medicine.");
+            }
+        } catch (error) {
+            setErrorMessage("Failed to update medicine.");
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+    // Delete Medicine
+    const handleDeleteMedicine = async () => {
+        if (!selectedMed) return;
+
+        setIsActionLoading(true);
+        setErrorMessage("");
+        setSuccessMessage("");
+
+        try {
+            const response = await fetch("/api/stock", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "delete",
+                    id: selectedMed.id !== undefined ? String(selectedMed.id) : "",
+                    name: selectedMed.name,
+                    rowIndex: selectedMed.rowIndex
+                })
+            });
+
+            if (response.ok) {
+                setSuccessMessage(`"${selectedMed.name}" deleted successfully.`);
+                setIsDeleteOpen(false);
+                setSelectedMed(null);
+                loadData();
+            } else {
+                const err = await response.json();
+                setErrorMessage(err.error || "Failed to delete medicine.");
+            }
+        } catch (error) {
+            setErrorMessage("Failed to delete medicine.");
         } finally {
             setIsActionLoading(false);
         }
@@ -346,15 +445,26 @@ export function StockManagement() {
                                     {errorMessage && <div className="p-3 bg-red-50 text-red-600 text-xs rounded-xl font-bold">{errorMessage}</div>}
                                     {successMessage && <div className="p-3 bg-emerald-50 text-emerald-600 text-xs rounded-xl font-bold">{successMessage}</div>}
                                     
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500 uppercase">Medicine Name</label>
-                                        <Input
-                                            required
-                                            value={newMed.name}
-                                            onChange={(e) => setNewMed({ ...newMed, name: e.target.value })}
-                                            placeholder="e.g. Paracetamol"
-                                            className="rounded-xl mt-1"
-                                        />
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-500 uppercase">New Medicine Name</label>
+                                            <Input
+                                                required
+                                                value={newMed.name}
+                                                onChange={(e) => setNewMed({ ...newMed, name: e.target.value })}
+                                                placeholder="e.g. TAB. KHAZNA CARE"
+                                                className="rounded-xl mt-1"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-500 uppercase">Old / Previous Name</label>
+                                            <Input
+                                                value={newMed.oldName}
+                                                onChange={(e) => setNewMed({ ...newMed, oldName: e.target.value })}
+                                                placeholder="e.g. TAB. ALEGRA (Optional)"
+                                                className="rounded-xl mt-1"
+                                            />
+                                        </div>
                                     </div>
                                     <div className="grid grid-cols-2 gap-3">
                                         <div>
@@ -441,24 +551,25 @@ export function StockManagement() {
                                 <Table>
                                     <TableHeader>
                                         <TableRow className="bg-slate-50/30">
-                                            <TableHead className="px-4 font-bold text-[10px] uppercase text-slate-500">Name</TableHead>
-                                            <TableHead className="w-[100px] px-4 font-bold text-[10px] uppercase text-slate-500 text-center">Type</TableHead>
-                                            <TableHead className="w-[100px] px-4 font-bold text-[10px] uppercase text-slate-500 text-center">Total Stock</TableHead>
-                                            <TableHead className="w-[110px] px-4 font-bold text-[10px] uppercase text-slate-500 text-center">Available Stock</TableHead>
-                                            <TableHead className="w-[90px] px-4 font-bold text-[10px] uppercase text-slate-500 text-center">Status</TableHead>
-                                            <TableHead className="w-[80px] text-right pr-6 font-bold text-[10px] uppercase text-slate-500">Action</TableHead>
+                                            <TableHead className="px-4 font-bold text-[10px] uppercase text-slate-500">New Medicine Name</TableHead>
+                                            <TableHead className="px-4 font-bold text-[10px] uppercase text-slate-500">Old / Previous Name</TableHead>
+                                            <TableHead className="w-[85px] px-2 font-bold text-[10px] uppercase text-slate-500 text-center">Type</TableHead>
+                                            <TableHead className="w-[80px] px-2 font-bold text-[10px] uppercase text-slate-500 text-center">Total</TableHead>
+                                            <TableHead className="w-[90px] px-2 font-bold text-[10px] uppercase text-slate-500 text-center">Available</TableHead>
+                                            <TableHead className="w-[80px] px-2 font-bold text-[10px] uppercase text-slate-500 text-center">Status</TableHead>
+                                            <TableHead className="w-[145px] text-right pr-4 font-bold text-[10px] uppercase text-slate-500">Actions</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {isLoading ? (
                                             <TableRow>
-                                                <TableCell colSpan={6} className="text-center py-10 text-slate-400 italic">
+                                                <TableCell colSpan={7} className="text-center py-10 text-slate-400 italic">
                                                     Fetching live stock levels...
                                                 </TableCell>
                                             </TableRow>
                                         ) : filteredMedicines.length === 0 ? (
                                             <TableRow>
-                                                <TableCell colSpan={6} className="text-center py-10 text-slate-400 italic">
+                                                <TableCell colSpan={7} className="text-center py-10 text-slate-400 italic">
                                                     No medicines match search query.
                                                 </TableCell>
                                             </TableRow>
@@ -472,21 +583,25 @@ export function StockManagement() {
                                                     <TableRow key={med.id || idx}>
                                                         <TableCell className="px-4 py-3">
                                                             <div className="font-black text-slate-800 text-sm uppercase">{med.name}</div>
-                                                            {med.oldName && (
-                                                                <div className="text-[11px] text-slate-400 font-medium italic">
-                                                                    Formerly: {med.oldName}
-                                                                </div>
-                                                            )}
-                                                            <div className="text-[10px] text-slate-400">Unit: {med.unitMeasurement}</div>
+                                                            <div className="text-[10px] text-slate-400">Unit: {med.unitMeasurement || 'units'}</div>
                                                         </TableCell>
-                                                        <TableCell className="text-center px-4 py-3">
+                                                        <TableCell className="px-4 py-3">
+                                                            {med.oldName ? (
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                                                                    {med.oldName}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-slate-400 text-xs italic">—</span>
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="text-center px-2 py-3">
                                                             <Badge variant="secondary" className="rounded-lg text-[10px] font-black uppercase text-slate-600 bg-slate-100">
                                                                 {med.type}
                                                             </Badge>
                                                         </TableCell>
-                                                        <TableCell className="text-center font-bold px-4 py-3 text-slate-600">{med.totalStock}</TableCell>
-                                                        <TableCell className="text-center font-black px-4 py-3 text-slate-800">{avail}</TableCell>
-                                                        <TableCell className="text-center px-4 py-3">
+                                                        <TableCell className="text-center font-bold px-2 py-3 text-slate-600">{med.totalStock}</TableCell>
+                                                        <TableCell className="text-center font-black px-2 py-3 text-slate-800">{avail}</TableCell>
+                                                        <TableCell className="text-center px-2 py-3">
                                                             {isLow ? (
                                                                 <Badge className="bg-red-50 hover:bg-red-50 text-red-600 border border-red-200 text-[9px] font-black uppercase px-2 py-0.5 rounded">
                                                                     LOW
@@ -497,18 +612,56 @@ export function StockManagement() {
                                                                 </Badge>
                                                             )}
                                                         </TableCell>
-                                                        <TableCell className="text-right pr-6 py-3">
-                                                            <Button 
-                                                                variant="outline" 
-                                                                size="sm" 
-                                                                className="h-8 rounded-lg text-[9px] font-black border-slate-200"
-                                                                onClick={() => {
-                                                                    setSelectedMed(med);
-                                                                    setIsAdjustOpen(true);
-                                                                }}
-                                                            >
-                                                                <Edit3 className="h-3 w-3 mr-1" /> ADJUST
-                                                            </Button>
+                                                        <TableCell className="text-right pr-4 py-3">
+                                                            <div className="flex items-center justify-end gap-1">
+                                                                <Button 
+                                                                    variant="outline" 
+                                                                    size="sm" 
+                                                                    title="Adjust Stock Quantity"
+                                                                    className="h-8 px-2 rounded-lg text-[9px] font-black border-slate-200 hover:bg-slate-50"
+                                                                    onClick={() => {
+                                                                        setSelectedMed(med);
+                                                                        setIsAdjustOpen(true);
+                                                                    }}
+                                                                >
+                                                                    <Scale className="h-3 w-3 mr-1 text-slate-600" /> ADJUST
+                                                                </Button>
+                                                                <Button 
+                                                                    variant="outline" 
+                                                                    size="sm" 
+                                                                    title="Edit Drug Details"
+                                                                    className="h-8 w-8 p-0 rounded-lg border-slate-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
+                                                                    onClick={() => {
+                                                                        setSelectedMed(med);
+                                                                        setEditMed({
+                                                                            id: med.id ? String(med.id) : "",
+                                                                            name: med.name || "",
+                                                                            oldName: med.oldName || "",
+                                                                            type: med.type || "Tablet",
+                                                                            unitMeasurement: med.unitMeasurement || "mg",
+                                                                            totalStock: String(med.totalStock ?? 0),
+                                                                            availableStock: String(med.availableStock ?? 0),
+                                                                            lowStockThreshold: String(med.lowStockThreshold ?? 10),
+                                                                            rowIndex: med.rowIndex !== undefined ? med.rowIndex : (idx + 2)
+                                                                        });
+                                                                        setIsEditOpen(true);
+                                                                    }}
+                                                                >
+                                                                    <Edit3 className="h-3.5 w-3.5 text-slate-600" />
+                                                                </Button>
+                                                                <Button 
+                                                                    variant="outline" 
+                                                                    size="sm" 
+                                                                    title="Delete Drug"
+                                                                    className="h-8 w-8 p-0 rounded-lg border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
+                                                                    onClick={() => {
+                                                                        setSelectedMed(med);
+                                                                        setIsDeleteOpen(true);
+                                                                    }}
+                                                                >
+                                                                    <Trash2 className="h-3.5 w-3.5 text-slate-500 hover:text-red-600" />
+                                                                </Button>
+                                                            </div>
                                                         </TableCell>
                                                     </TableRow>
                                                 );
@@ -624,6 +777,154 @@ export function StockManagement() {
                                 </Button>
                             </DialogFooter>
                         </form>
+                    )}
+                </DialogContent>
+            </Dialog>
+
+            {/* Edit Medicine Modal */}
+            <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+                <DialogContent className="sm:max-w-[480px] rounded-2xl bg-white">
+                    {selectedMed && (
+                        <form onSubmit={handleEditMedicine}>
+                            <DialogHeader>
+                                <DialogTitle className="flex items-center gap-2">
+                                    <Edit3 className="h-5 w-5 text-blue-600" />
+                                    Edit Medicine Details
+                                </DialogTitle>
+                                <DialogDescription>
+                                    Update medicine names, form, measurement unit, or baseline inventory. Changes sync to Google Sheets.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4 py-4">
+                                {errorMessage && <div className="p-3 bg-red-50 text-red-600 text-xs rounded-xl font-bold">{errorMessage}</div>}
+                                
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 uppercase">New Medicine Name</label>
+                                        <Input
+                                            required
+                                            value={editMed.name}
+                                            onChange={(e) => setEditMed({ ...editMed, name: e.target.value })}
+                                            placeholder="e.g. TAB. KHAZNA CARE"
+                                            className="rounded-xl mt-1"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 uppercase">Old / Previous Name</label>
+                                        <Input
+                                            value={editMed.oldName}
+                                            onChange={(e) => setEditMed({ ...editMed, oldName: e.target.value })}
+                                            placeholder="e.g. TAB. ALEGRA"
+                                            className="rounded-xl mt-1"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 uppercase">Type / Form</label>
+                                        <select
+                                            value={editMed.type}
+                                            onChange={(e) => setEditMed({ ...editMed, type: e.target.value })}
+                                            className="flex h-10 w-full rounded-xl border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-primary mt-1"
+                                        >
+                                            <option value="Tablet">Tablet</option>
+                                            <option value="Capsule">Capsule</option>
+                                            <option value="Syrup">Syrup</option>
+                                            <option value="Injection">Injection</option>
+                                            <option value="Ointment">Ointment</option>
+                                            <option value="Drops">Drops</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 uppercase">Unit Measure</label>
+                                        <Input
+                                            value={editMed.unitMeasurement}
+                                            onChange={(e) => setEditMed({ ...editMed, unitMeasurement: e.target.value })}
+                                            placeholder="e.g. mg, ml"
+                                            className="rounded-xl mt-1"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 uppercase">Available Stock</label>
+                                        <Input
+                                            type="number"
+                                            value={editMed.availableStock}
+                                            onChange={(e) => setEditMed({ ...editMed, availableStock: e.target.value })}
+                                            className="rounded-xl mt-1"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 uppercase">Total Stock</label>
+                                        <Input
+                                            type="number"
+                                            value={editMed.totalStock}
+                                            onChange={(e) => setEditMed({ ...editMed, totalStock: e.target.value })}
+                                            className="rounded-xl mt-1"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 uppercase">Threshold</label>
+                                        <Input
+                                            type="number"
+                                            value={editMed.lowStockThreshold}
+                                            onChange={(e) => setEditMed({ ...editMed, lowStockThreshold: e.target.value })}
+                                            className="rounded-xl mt-1"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            <DialogFooter className="gap-2 sm:gap-0">
+                                <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)} className="rounded-xl">
+                                    Cancel
+                                </Button>
+                                <Button type="submit" disabled={isActionLoading} className="rounded-xl bg-blue-600 text-white hover:bg-blue-700">
+                                    {isActionLoading ? "Saving Changes..." : "Save Changes"}
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    )}
+                </DialogContent>
+            </Dialog>
+
+            {/* Delete Confirmation Modal */}
+            <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+                <DialogContent className="sm:max-w-[400px] rounded-2xl bg-white">
+                    {selectedMed && (
+                        <div>
+                            <DialogHeader>
+                                <DialogTitle className="flex items-center gap-2 text-red-600">
+                                    <Trash2 className="h-5 w-5" />
+                                    Delete Medicine
+                                </DialogTitle>
+                                <DialogDescription>
+                                    Are you sure you want to permanently remove <span className="font-bold text-slate-800 uppercase">{selectedMed.name}</span> from the inventory?
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="py-4">
+                                {errorMessage && <div className="p-3 bg-red-50 text-red-600 text-xs rounded-xl font-bold mb-3">{errorMessage}</div>}
+                                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 space-y-1">
+                                    <p className="font-semibold">⚠️ Notice:</p>
+                                    <p>This action will delete the medicine row from Google Sheets. Patient dispense records already recorded in historical logs will be preserved.</p>
+                                </div>
+                            </div>
+                            <DialogFooter className="gap-2 sm:gap-0">
+                                <Button type="button" variant="outline" onClick={() => setIsDeleteOpen(false)} className="rounded-xl">
+                                    Cancel
+                                </Button>
+                                <Button 
+                                    type="button" 
+                                    disabled={isActionLoading} 
+                                    onClick={handleDeleteMedicine}
+                                    className="rounded-xl bg-red-600 text-white hover:bg-red-700"
+                                >
+                                    {isActionLoading ? "Deleting..." : "Yes, Delete Medicine"}
+                                </Button>
+                            </DialogFooter>
+                        </div>
                     )}
                 </DialogContent>
             </Dialog>

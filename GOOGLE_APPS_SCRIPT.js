@@ -146,11 +146,22 @@ function handleStockAction(action, medicineData) {
     const sheet = ss.getSheetByName(MEDICINES_SHEET);
     const timestamp = Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd HH:mm:ss");
     
+    const allData = sheet.getDataRange().getValues();
+    const headers = allData.length > 0 ? allData[0].map(h => String(h).trim()) : [];
+    
+    // Ensure OldName header exists
+    let oldNameColIdx = headers.findIndex(h => h.toLowerCase() === "oldname");
+    if (oldNameColIdx === -1 && headers.length > 0) {
+      sheet.getRange(1, headers.length + 1).setValue("OldName").setFontWeight("bold").setBackground("#f3f3f3").setHorizontalAlignment("center");
+      headers.push("OldName");
+      oldNameColIdx = headers.length - 1;
+    }
+
     if (action === "create") {
       const id = "MED-" + Utilities.getUuid().substring(0, 8).toUpperCase();
       const row = [
         id,
-        medicineData.name,
+        medicineData.name || "",
         medicineData.batchType || "",
         medicineData.unit || "",
         medicineData.unitMeasurement || "",
@@ -159,43 +170,71 @@ function handleStockAction(action, medicineData) {
         Number(medicineData.pendingStock) || 0,
         Number(medicineData.outgoingStock) || 0,
         Number(medicineData.lowStockThreshold) || 10,
-        timestamp
+        timestamp,
+        medicineData.oldName || ""
       ];
       sheet.appendRow(row);
       return createJsonResponse({ success: true, action: "create", data: { id } });
     }
     
-    if (action === "update") {
-      const rowIndex = Number(medicineData.rowIndex); // UI 0-based array index
-      if (isNaN(rowIndex) || rowIndex < 0) {
-        return createJsonResponse({ success: false, error: "Invalid rowIndex" });
+    // Helper to find target row
+    let actualRow = -1;
+    const targetId = String(medicineData.id || medicineData.ID || "").trim();
+    const targetName = String(medicineData.originalName || medicineData.name || medicineData.Name || "").trim().toLowerCase();
+
+    if (medicineData.rowIndex !== undefined && medicineData.rowIndex !== null && !isNaN(Number(medicineData.rowIndex))) {
+      const testRow = Number(medicineData.rowIndex) + 2;
+      if (testRow >= 2 && testRow <= allData.length) {
+        const rId = String(allData[testRow - 1][0] || "").trim();
+        const rName = String(allData[testRow - 1][1] || "").trim().toLowerCase();
+        if ((targetId && rId === targetId) || (targetName && rName === targetName)) {
+          actualRow = testRow;
+        }
       }
-      
-      const actualRow = rowIndex + 2; // maps to sheet row (header is row 1)
-      const row = [
-        medicineData.ID || medicineData.id || "",
-        medicineData.Name || medicineData.name || "",
-        medicineData.BatchType || medicineData.batchType || "",
-        medicineData.Unit || medicineData.unit || "",
-        medicineData.UnitMeasurement || medicineData.unitMeasurement || "",
-        Number(medicineData.TotalStock !== undefined ? medicineData.TotalStock : medicineData.totalStock) || 0,
-        Number(medicineData.AvailableStock !== undefined ? medicineData.AvailableStock : medicineData.availableStock) || 0,
-        Number(medicineData.PendingStock !== undefined ? medicineData.PendingStock : medicineData.pendingStock) || 0,
-        Number(medicineData.OutgoingStock !== undefined ? medicineData.OutgoingStock : medicineData.outgoingStock) || 0,
-        Number(medicineData.LowStockThreshold !== undefined ? medicineData.LowStockThreshold : medicineData.lowStockThreshold) || 10,
-        timestamp
+    }
+
+    if (actualRow === -1) {
+      for (let r = 1; r < allData.length; r++) {
+        const rId = String(allData[r][0] || "").trim();
+        const rName = String(allData[r][1] || "").trim().toLowerCase();
+        if ((targetId && rId === targetId) || (targetName && rName === targetName)) {
+          actualRow = r + 1;
+          break;
+        }
+      }
+    }
+
+    if (actualRow === -1 && medicineData.rowIndex !== undefined && !isNaN(Number(medicineData.rowIndex))) {
+      actualRow = Number(medicineData.rowIndex) + 2;
+    }
+
+    if (actualRow < 2) {
+      return createJsonResponse({ success: false, error: "Medicine row not found for update/delete" });
+    }
+
+    if (action === "update") {
+      const existingRow = actualRow <= allData.length ? allData[actualRow - 1] : [];
+      const updatedRow = [
+        medicineData.ID || medicineData.id || existingRow[0] || "",
+        medicineData.Name || medicineData.name || existingRow[1] || "",
+        medicineData.BatchType || medicineData.batchType || existingRow[2] || "",
+        medicineData.Unit || medicineData.unit || existingRow[3] || "",
+        medicineData.UnitMeasurement || medicineData.unitMeasurement || existingRow[4] || "",
+        Number(medicineData.TotalStock !== undefined ? medicineData.TotalStock : (medicineData.totalStock !== undefined ? medicineData.totalStock : existingRow[5])) || 0,
+        Number(medicineData.AvailableStock !== undefined ? medicineData.AvailableStock : (medicineData.availableStock !== undefined ? medicineData.availableStock : existingRow[6])) || 0,
+        Number(medicineData.PendingStock !== undefined ? medicineData.PendingStock : (medicineData.pendingStock !== undefined ? medicineData.pendingStock : existingRow[7])) || 0,
+        Number(medicineData.OutgoingStock !== undefined ? medicineData.OutgoingStock : (medicineData.outgoingStock !== undefined ? medicineData.outgoingStock : existingRow[8])) || 0,
+        Number(medicineData.LowStockThreshold !== undefined ? medicineData.LowStockThreshold : (medicineData.lowStockThreshold !== undefined ? medicineData.lowStockThreshold : existingRow[9])) || 10,
+        timestamp,
+        medicineData.OldName !== undefined ? medicineData.OldName : (medicineData.oldName !== undefined ? medicineData.oldName : (existingRow[11] || ""))
       ];
       
-      sheet.getRange(actualRow, 1, 1, row.length).setValues([row]);
+      sheet.getRange(actualRow, 1, 1, updatedRow.length).setValues([updatedRow]);
       return createJsonResponse({ success: true, action: "update" });
     }
     
     if (action === "delete") {
-      const rowIndex = Number(medicineData.rowIndex);
-      if (isNaN(rowIndex) || rowIndex < 0) {
-        return createJsonResponse({ success: false, error: "Invalid rowIndex" });
-      }
-      sheet.deleteRow(rowIndex + 2);
+      sheet.deleteRow(actualRow);
       return createJsonResponse({ success: true, action: "delete" });
     }
     

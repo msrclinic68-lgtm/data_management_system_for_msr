@@ -54,6 +54,8 @@ export interface MedicineData {
     id?: string;
     ID?: string;
     name: string;
+    oldName?: string;
+    originalName?: string;
     batchType?: string;
     unit: string;
     unitMeasurement: string;
