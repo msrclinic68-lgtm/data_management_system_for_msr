@@ -197,7 +197,35 @@ export async function getMedicines(): Promise<any[]> {
   }
   
   const list: any[] = await appsScript.getMedicines();
-  const mapped = (list || [])
+  
+  // Deduplicate entries by normalized drug name to prevent duplicate rows from Google Sheets
+  const seenMap = new Map<string, any>();
+  for (let i = 0; i < (list || []).length; i++) {
+    const raw = list[i];
+    const name = String(raw.name || raw.Name || "").trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    
+    // Attach original row index
+    if (raw.rowIndex === undefined) {
+      raw.rowIndex = i;
+    }
+
+    if (!seenMap.has(key)) {
+      seenMap.set(key, raw);
+    } else {
+      const existing = seenMap.get(key);
+      const existingStock = Number(existing.availableStock !== undefined ? existing.availableStock : existing.AvailableStock) || 0;
+      const currentStock = Number(raw.availableStock !== undefined ? raw.availableStock : raw.AvailableStock) || 0;
+      if (currentStock > existingStock || (!existing.oldName && !existing.OldName && (raw.oldName || raw.OldName))) {
+        seenMap.set(key, raw);
+      }
+    }
+  }
+
+  const uniqueList = Array.from(seenMap.values());
+
+  const mapped = uniqueList
     .map((m, index) => {
       const medName = m.name || m.Name || "";
       return {
