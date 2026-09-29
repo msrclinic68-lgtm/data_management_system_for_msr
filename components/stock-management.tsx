@@ -340,60 +340,60 @@ export function StockManagement() {
         <div className="space-y-6">
             
             {/* Top Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 <Card className="border-slate-200 shadow-sm bg-white">
-                    <CardContent className="pt-4 flex items-center justify-between">
+                    <CardContent className="pt-4 p-3 sm:p-6 flex items-center justify-between">
                         <div>
                             <span className="text-[10px] uppercase font-bold text-slate-400">Total Medicines</span>
-                            <p className="text-2xl font-black text-slate-800">{medicines.length}</p>
+                            <p className="text-xl sm:text-2xl font-black text-slate-800">{medicines.length}</p>
                         </div>
-                        <div className="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500">
-                            <Package className="h-5 w-5" />
+                        <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
+                            <Package className="h-4 w-4 sm:h-5 sm:w-5" />
                         </div>
                     </CardContent>
                 </Card>
 
                 <Card className="border-slate-200 shadow-sm bg-white border-l-4 border-l-amber-500">
-                    <CardContent className="pt-4 flex items-center justify-between">
+                    <CardContent className="pt-4 p-3 sm:p-6 flex items-center justify-between">
                         <div>
                             <span className="text-[10px] uppercase font-bold text-slate-400">Low Stock Alerts</span>
-                            <p className="text-2xl font-black text-amber-600">{lowStockItems.length}</p>
+                            <p className="text-xl sm:text-2xl font-black text-amber-600">{lowStockItems.length}</p>
                         </div>
-                        <div className="h-10 w-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500">
-                            <AlertTriangle className="h-5 w-5" />
+                        <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500 shrink-0">
+                            <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5" />
                         </div>
                     </CardContent>
                 </Card>
 
                 <Card className="border-slate-200 shadow-sm bg-white">
-                    <CardContent className="pt-4 flex items-center justify-between">
+                    <CardContent className="pt-4 p-3 sm:p-6 flex items-center justify-between">
                         <div>
                             <span className="text-[10px] uppercase font-bold text-slate-400">Pending Orders</span>
-                            <p className="text-2xl font-black text-blue-600">
+                            <p className="text-xl sm:text-2xl font-black text-blue-600">
                                 {medicines.reduce((acc, curr) => acc + (Number(curr.pendingStock) || 0), 0)}
                             </p>
                         </div>
-                        <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-500">
-                            <Scale className="h-5 w-5" />
+                        <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-500 shrink-0">
+                            <Scale className="h-4 w-4 sm:h-5 sm:w-5" />
                         </div>
                     </CardContent>
                 </Card>
 
                 <Card className="border-slate-200 shadow-sm bg-white">
-                    <CardContent className="pt-4 flex items-center justify-between">
+                    <CardContent className="pt-4 p-3 sm:p-6 flex items-center justify-between">
                         <div>
                             <span className="text-[10px] uppercase font-bold text-slate-400">Dispenses Logged</span>
-                            <p className="text-2xl font-black text-emerald-600">{dispensedLogs.length}</p>
+                            <p className="text-xl sm:text-2xl font-black text-emerald-600">{dispensedLogs.length}</p>
                         </div>
-                        <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-500">
-                            <History className="h-5 w-5" />
+                        <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-500 shrink-0">
+                            <History className="h-4 w-4 sm:h-5 sm:w-5" />
                         </div>
                     </CardContent>
                 </Card>
             </div>
 
             {/* Inventory Controls */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4">
                 <div className="relative flex-1 w-full max-w-sm">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
@@ -401,17 +401,17 @@ export function StockManagement() {
                         placeholder="Search medicines..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-9 h-10 rounded-xl"
+                        className="pl-9 h-10 rounded-xl w-full"
                     />
                 </div>
                 
-                <div className="flex gap-2 w-full sm:w-auto">
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                     <Button 
                         variant="outline" 
                         size="sm" 
                         onClick={loadData}
                         disabled={isLoading}
-                        className="h-10 px-4 rounded-xl border-slate-200"
+                        className="h-10 px-3 sm:px-4 rounded-xl border-slate-200"
                     >
                         <RefreshCw className={cn("mr-2 h-4 w-4", isLoading && "animate-spin")} />
                         Refresh
@@ -421,7 +421,7 @@ export function StockManagement() {
                         patientName="" 
                         patientSlug="" 
                         trigger={
-                            <Button size="sm" className="rounded-xl h-10 px-4 bg-emerald-600 text-white hover:bg-emerald-700">
+                            <Button size="sm" className="rounded-xl h-10 px-3 sm:px-4 bg-emerald-600 text-white hover:bg-emerald-700">
                                 <PlusCircle className="mr-2 h-4 w-4" /> Quick Dispense
                             </Button>
                         }
@@ -431,11 +431,11 @@ export function StockManagement() {
                     {/* Add Medicine Dialog */}
                     <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
                         <DialogTrigger asChild>
-                            <Button size="sm" className="rounded-xl h-10 px-4 bg-slate-900 text-white hover:bg-black">
+                            <Button size="sm" className="rounded-xl h-10 px-3 sm:px-4 bg-slate-900 text-white hover:bg-black">
                                 <PlusCircle className="mr-2 h-4 w-4" /> Add Medicine
                             </Button>
                         </DialogTrigger>
-                        <DialogContent className="sm:max-w-[425px] rounded-2xl bg-white">
+                        <DialogContent className="w-[95vw] sm:max-w-[460px] max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-4 sm:p-6">
                             <form onSubmit={handleAddMedicine}>
                                 <DialogHeader>
                                     <DialogTitle>Register New Medicine</DialogTitle>
@@ -525,7 +525,10 @@ export function StockManagement() {
                                         </div>
                                     </div>
                                 </div>
-                                <DialogFooter>
+                                <DialogFooter className="gap-2 sm:gap-0 pt-2">
+                                    <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)} className="rounded-xl">
+                                        Cancel
+                                    </Button>
                                     <Button type="submit" disabled={isActionLoading} className="rounded-xl bg-slate-900 text-white">
                                         {isActionLoading ? "Saving..." : "Register Medicine"}
                                     </Button>
@@ -548,7 +551,7 @@ export function StockManagement() {
                         </CardHeader>
                         <CardContent className="p-0">
                             <div className="overflow-x-auto">
-                                <Table>
+                                <Table className="min-w-[700px]">
                                     <TableHeader>
                                         <TableRow className="bg-slate-50/30">
                                             <TableHead className="px-4 font-bold text-[10px] uppercase text-slate-500">New Medicine Name</TableHead>
@@ -718,7 +721,7 @@ export function StockManagement() {
 
             {/* Adjust Stock Level Modal */}
             <Dialog open={isAdjustOpen} onOpenChange={setIsAdjustOpen}>
-                <DialogContent className="sm:max-w-[425px] rounded-2xl bg-white">
+                <DialogContent className="w-[95vw] sm:max-w-[425px] max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-4 sm:p-6">
                     {selectedMed && (
                         <form onSubmit={handleAdjustStock}>
                             <DialogHeader>
@@ -771,7 +774,10 @@ export function StockManagement() {
                                     />
                                 </div>
                             </div>
-                            <DialogFooter>
+                            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+                                <Button type="button" variant="outline" onClick={() => setIsAdjustOpen(false)} className="rounded-xl">
+                                    Cancel
+                                </Button>
                                 <Button type="submit" disabled={isActionLoading} className="rounded-xl bg-slate-900 text-white">
                                     {isActionLoading ? "Processing..." : "Commit Stock Adjust"}
                                 </Button>
@@ -783,7 +789,7 @@ export function StockManagement() {
 
             {/* Edit Medicine Modal */}
             <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-                <DialogContent className="sm:max-w-[480px] rounded-2xl bg-white">
+                <DialogContent className="w-[95vw] sm:max-w-[480px] max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-4 sm:p-6">
                     {selectedMed && (
                         <form onSubmit={handleEditMedicine}>
                             <DialogHeader>
@@ -892,7 +898,7 @@ export function StockManagement() {
 
             {/* Delete Confirmation Modal */}
             <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-                <DialogContent className="sm:max-w-[400px] rounded-2xl bg-white">
+                <DialogContent className="w-[95vw] sm:max-w-[400px] max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-4 sm:p-6">
                     {selectedMed && (
                         <div>
                             <DialogHeader>

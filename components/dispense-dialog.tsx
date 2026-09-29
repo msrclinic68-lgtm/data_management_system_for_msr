@@ -123,7 +123,7 @@ export function DispenseDialog({ patientName, patientSlug, onSuccess, trigger }:
                     </Button>
                 )}
             </DialogTrigger>
-            <DialogContent className="max-w-md bg-white rounded-2xl shadow-xl border-none">
+            <DialogContent className="w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6 bg-white rounded-2xl shadow-xl border border-slate-100">
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <DialogHeader>
                         <DialogTitle className="text-xl font-bold flex items-center gap-2">
@@ -199,8 +199,10 @@ export function DispenseDialog({ patientName, patientSlug, onSuccess, trigger }:
                         </div>
                     </div>
 
-                    <DialogFooter className="pt-4 border-t border-slate-100">
-                        <Button type="button" variant="ghost" onClick={() => setOpen(false)} className="rounded-xl h-11 font-semibold">Cancel</Button>
+                    <DialogFooter className="pt-4 border-t border-slate-100 flex-row gap-2 sm:gap-0 justify-end">
+                        <Button type="button" variant="outline" onClick={() => setOpen(false)} className="rounded-xl h-11 font-semibold border-slate-200">
+                            Cancel
+                        </Button>
                         <Button type="submit" disabled={isSubmitting || success} className="rounded-xl h-11 font-bold bg-slate-900 hover:bg-black text-white px-6">
                             {isSubmitting ? (
                                 <>

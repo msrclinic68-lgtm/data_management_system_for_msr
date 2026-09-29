@@ -105,7 +105,7 @@ export default async function PatientProfilePage(props: PageProps) {
                         </Link>
                     </Button>
                     
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <Button asChild size="sm" className="rounded-xl h-10 px-4 font-bold bg-slate-900 text-white hover:bg-black shadow-sm">
                             <Link href="/new">
                                 <PlusCircle className="mr-2 h-4 w-4" />
@@ -272,8 +272,8 @@ export default async function PatientProfilePage(props: PageProps) {
 
                                             {/* Action Buttons for this Visit */}
                                             <div className="flex flex-wrap items-center gap-2">
-                                                <DownloadReportButton assessment={assessment} />
-                                                <DownloadSummaryButton assessment={assessment} />
+                                                <DownloadReportButton assessment={assessment} className="h-9 px-3 text-xs rounded-xl shadow-sm" />
+                                                <DownloadSummaryButton assessment={assessment} className="h-9 px-3 text-xs rounded-xl shadow-sm" />
                                                 
                                                 <DailyNoteSheet assessment={assessment}>
                                                     <Button variant="secondary" size="sm" className="rounded-xl shadow-sm h-9 px-3.5 font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border-none">
