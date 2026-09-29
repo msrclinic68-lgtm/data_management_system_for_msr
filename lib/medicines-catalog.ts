@@ -185,6 +185,10 @@ MEDICINES_CATALOG.forEach((item) => {
   }
 });
 
+// Common legacy aliases from older sheet entries
+NEW_TO_OLD_NAME_MAP["TAB. ACICID"] = "TAB. ACILOC";
+NEW_TO_OLD_NAME_MAP["tab. acicid"] = "TAB. ACILOC";
+
 /**
  * Strips dosage prefixes (TAB., CAP., SY., INJ., etc.) to obtain the clean medicine root name
  * E.g. "TAB. KHAZNA CARE" -> "KHAZNA CARE"

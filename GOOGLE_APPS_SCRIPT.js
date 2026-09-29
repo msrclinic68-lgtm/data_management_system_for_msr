@@ -399,7 +399,7 @@ function setupSheets(ss) {
   if (!medSheet) {
     medSheet = ss.insertSheet(MEDICINES_SHEET);
   }
-  const medHeaders = ["ID", "Name", "BatchType", "Unit", "UnitMeasurement", "TotalStock", "AvailableStock", "PendingStock", "OutgoingStock", "LowStockThreshold", "Timestamp"];
+  const medHeaders = ["ID", "Name", "BatchType", "Unit", "UnitMeasurement", "TotalStock", "AvailableStock", "PendingStock", "OutgoingStock", "LowStockThreshold", "Timestamp", "OldName"];
   medSheet.getRange(1, 1, 1, medHeaders.length).setValues([medHeaders]);
   medSheet.getRange(1, 1, 1, medHeaders.length).setFontWeight("bold").setBackground("#f3f3f3").setHorizontalAlignment("center");
   medSheet.setFrozenRows(1);
